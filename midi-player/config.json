@@ -1,0 +1,16 @@
+{
+  "fluidsynthBaseUrl": "https://pub-112322b050ec435fa1930c3330159a6a.r2.dev/",
+  "soundfontBaseUrl": "https://jawnypants.github.io/MidiTuningAssets/assets/soundfonts/",
+  "midiBaseUrl": "https://jawnypants.github.io/MidiTuningAssets/assets/midi/",
+  "sampleMidiManifestUrl": "https://jawnypants.github.io/MidiTuningAssets/assets/midi/manifest.json",
+  "scalaLiteBaseUrl": "https://jawnypants.github.io/MidiTuningAssets/assets/ScalaLite/",
+  "scalaFullBaseUrl": "https://jawnypants.github.io/MidiTuningAssets/assets/Scala%20Archive/",
+  "scalaLiteManifestUrl": "https://jawnypants.github.io/MidiTuningAssets/assets/scala-lite-manifest.json",
+  "scalaFullManifestUrl": "https://jawnypants.github.io/MidiTuningAssets/assets/scala-manifest.json",
+  "supabaseUrl": "https://<your-project>.supabase.co",
+  "supabasePublishableKey": "replace-with-public-anon-key",
+  "radioStreamUrl": "https://example.com/hls/stream.m3u8",
+  "radioSubmitUrl": "https://example.com/api/radiograph/submit",
+  "radioStatusUrl": "https://example.com/api/radiograph/status",
+  "radioRecipeUrl": "https://example.com/api/radiograph/recipe"
+}

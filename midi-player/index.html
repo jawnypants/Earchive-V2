@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EarB MIDI Player (Smoke Test)</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="title-shell">
+        <div class="title-band">
+            <div class="title-frame title-frame--left">
+                <div class="audio-launch-hint-wrap">
+                    <button id="enable-audio" class="glass-button glass-button--audio" type="button" aria-pressed="false">
+                        <span class="glass-button__label">Audio</span>
+                    </button>
+                    <div id="audio-launch-hint" class="audio-launch-hint" role="note">click Audio to begin</div>
+                </div>
+            </div>
+
+            <div class="title-core">
+                <div class="title-progress-track" aria-hidden="true">
+                    <div id="audio-enable-progress" class="title-progress-fill"></div>
+                </div>
+                <h1 class="title-text">Earchive Of The Alternative Present</h1>
+            </div>
+
+            <div class="title-frame title-frame--right">
+                <div class="header-right-controls">
+                    <button id="help-toggle" class="glass-button glass-button--info" type="button" aria-label="Show info">
+                        <span class="glass-button__label">Info</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="tabs-auth-row">
+            <nav class="app-tabs" aria-label="Earchive sections">
+                <button class="tab is-active" type="button" data-page="recomposer" aria-current="page">Recomposer</button>
+                <button class="tab" type="button" data-page="librarian">Librarian</button>
+                <button class="tab" type="button" data-page="radiograph">RadioGraph</button>
+            </nav>
+            <div class="auth-quick">
+                <button id="auth-launch" type="button">Sign In</button>
+                <div id="auth-mini-status" class="auth-mini-status">Not signed in.</div>
+            </div>
+        </div>
+    </header>
+
+    <section class="page-view is-active" data-page-view="recomposer">
+        <div id="help-bubbles" class="panel is-hidden help-panel" aria-live="polite">
+            <p>Enable audio, load a MIDI file, then play and adjust settings.</p>
+            <button id="help-dismiss" type="button">Got it</button>
+        </div>
+
+        <div class="app">
+            <div class="recomposer-layout">
+                <div class="recomposer-left">
+                    <section class="panel recomposer-left-panel">
+                        <section class="recomposer-block panel-select">
+                            <div class="row tight action-row">
+                                <button id="load-button" class="button action-button" type="button">LOAD MIDI FILE</button>
+                                <button id="load-arrangement" class="button action-button" type="button" title="Sign in to load saved arrangements">LOAD ARRANGEMENT</button>
+                                <button id="save-arrangement" class="button action-button" type="button" title="Sign in to enable arrangement saving" disabled>SAVE ARRANGEMENT</button>
+                                <button id="record" class="button action-button" type="button" disabled>RECORD TO DESKTOP</button>
+                            </div>
+                            <div id="status" class="inline-status">Click Audio to begin.</div>
+                        </section>
+
+                        <section id="controls-panel" class="recomposer-block panel-transport">
+                            <div class="transport-shapes" role="group" aria-label="Transport controls">
+                                <button id="play" class="transport-shape transport-shape--play" type="button" aria-label="Play" disabled></button>
+                                <button id="pause" class="transport-shape transport-shape--pause" type="button" aria-label="Pause" disabled></button>
+                                <button id="stop" class="transport-shape transport-shape--stop" type="button" aria-label="Stop" disabled></button>
+                            </div>
+                            <div class="transport-shape-labels" aria-hidden="true">
+                                <span>PLAY</span>
+                                <span>PAUSE</span>
+                                <span>STOP</span>
+                            </div>
+                            <input type="checkbox" id="loop-toggle" class="is-hidden" checked>
+                            <div id="progress-time" class="progress-time-row">
+                                <span id="progress-elapsed">0:00</span>
+                                <span id="progress-remaining">-0:00</span>
+                            </div>
+                            <div class="row tight transport-progress-row">
+                                <input id="progress" type="range" min="0" max="0" step="0.01" value="0">
+                            </div>
+                            <div class="transport-divider" aria-hidden="true"></div>
+                            <div class="panel-heading-row transport-heading-row">
+                                <h2>Tuning &amp; Modality</h2>
+                                <div class="favorites-control">
+                                    <select id="favorites-select-scale" aria-label="Favorites for tuning and modality">
+                                        <option value="__default__">default</option>
+                                    </select>
+                                    <button id="favorites-add-scale" type="button" class="mini-button">+</button>
+                                    <button id="favorites-remove-scale" type="button" class="mini-button">-</button>
+                                </div>
+                            </div>
+                            <div class="transport-meta-row">
+                                <div class="transport-meta-control">
+                                    <label for="tempo-slider">TEMPO</label>
+                                    <input id="tempo-slider" type="number" min="25" max="200" step="1" value="100" disabled>
+                                    <button id="tempo-reset" type="button" class="mini-button" disabled>Reset</button>
+                                    <span id="tempo-value" class="is-hidden">100%</span>
+                                </div>
+                                <div class="transport-meta-control">
+                                    <label for="mode-select">MODALITY</label>
+                                    <select id="mode-select" disabled>
+                                        <option value="Ionian">Ionian</option>
+                                        <option value="Dorian">Dorian</option>
+                                        <option value="Phrygian">Phrygian</option>
+                                        <option value="Lydian">Lydian</option>
+                                        <option value="Mixolydian">Mixolydian</option>
+                                        <option value="Aeolian">Aeolian</option>
+                                        <option value="Locrian">Locrian</option>
+                                    </select>
+                                </div>
+                                <div class="transport-meta-control">
+                                    <label for="transpose-input">TRANSPOSE</label>
+                                    <input id="transpose-input" type="number" value="0" min="-24" max="24" step="1" disabled>
+                                    <button id="transpose-reset" type="button" class="mini-button" disabled>Reset</button>
+                                </div>
+                            </div>
+                            <div class="transport-tuning-row">
+                                <label>TUNING</label>
+                                <div class="transport-tuning-selects">
+                                    <select id="tuning-folder-select" disabled>
+                                        <option value="__all__">All folders</option>
+                                    </select>
+                                    <select id="tuning-select" disabled>
+                                        <option value="__equal__" selected>12-TET (Default)</option>
+                                    </select>
+                                </div>
+                                <div class="transport-tuning-actions">
+                                    <button id="tuning-reset" type="button" class="mini-button" disabled>Reset Tuning</button>
+                                    <button id="tuning-source-toggle" type="button" class="mini-button" aria-pressed="false">Switch to Full Archive</button>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section id="song-panel" class="recomposer-block panel-song">
+                            <h2>Song Info</h2>
+                            <div id="song-title" class="song-title"></div>
+                            <textarea id="song-display" rows="8" readonly></textarea>
+                        </section>
+                    </section>
+                </div>
+
+                <section id="instrument-panel" class="panel panel-instruments recomposer-right">
+                    <div class="panel-heading-row">
+                        <h2>Instrumentation</h2>
+                        <div class="favorites-control">
+                            <select id="favorites-select-inst" aria-label="Favorites for instrumentation">
+                                <option value="__default__">default</option>
+                            </select>
+                            <button id="favorites-add-inst" type="button" class="mini-button">+</button>
+                            <button id="favorites-remove-inst" type="button" class="mini-button">-</button>
+                        </div>
+                    </div>
+                    <div id="instrument-menus" class="instrument-grid"></div>
+                </section>
+            </div>
+        </div>
+    </section>
+
+    <section class="page-view" data-page-view="librarian">
+        <div class="app">
+            <section class="librarian-hero" aria-labelledby="librarian-title">
+                <div>
+                    <h2 id="librarian-title">The Librarian</h2>
+                    <p class="librarian-lede">Saved compositions, broadcast favorites, playlists, and listening queues for desktop playback.</p>
+                </div>
+                <div class="librarian-actions" aria-label="Library actions">
+                    <button id="librarian-save-current" class="button librarian-action librarian-action--save" type="button">SAVE CURRENT</button>
+                    <button id="librarian-import" class="button librarian-action librarian-action--import" type="button">IMPORT MIDI</button>
+                    <button id="librarian-load-cloud" class="button librarian-action librarian-action--cloud" type="button">LOAD LIBRARY</button>
+                </div>
+            </section>
+
+            <section class="librarian-player" aria-label="Librarian player">
+                <div class="librarian-player__art" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                <div class="librarian-player__meta">
+                    <span class="librarian-kicker">Now Playing</span>
+                    <h3 id="librarian-now-title">No composition loaded</h3>
+                    <p id="librarian-now-meta">Import a MIDI, restore a saved arrangement, or choose an item below.</p>
+                </div>
+                <div class="librarian-player__transport" role="group" aria-label="Playback controls">
+                    <button id="librarian-play" class="librarian-icon-button librarian-icon-button--play" type="button" aria-label="Play selected composition"></button>
+                    <button id="librarian-pause" class="librarian-icon-button librarian-icon-button--pause" type="button" aria-label="Pause playback"></button>
+                    <button id="librarian-stop" class="librarian-icon-button librarian-icon-button--stop" type="button" aria-label="Stop playback"></button>
+                </div>
+                <div class="librarian-comment-form" aria-label="Comment on RadioGraph source">
+                    <input id="librarian-comment-input" type="text" maxlength="500" placeholder="Comment on RadioGraph source">
+                    <button id="librarian-comment-submit" class="button librarian-action librarian-action--save" type="button" disabled>COMMENT</button>
+                    <div id="librarian-comment-status" class="inline-status librarian-status" aria-live="polite">Select a RadioGraph save to comment.</div>
+                </div>
+            </section>
+
+            <div class="librarian-grid">
+                <section class="panel librarian-panel librarian-panel--playlists" aria-labelledby="playlist-heading">
+                    <div class="panel-heading-row">
+                        <h2 id="playlist-heading">Playlist</h2>
+                        <div class="playlist-title-actions" role="group" aria-label="Playlist actions">
+                            <button id="librarian-add-playlist" class="mini-button playlist-title-button" type="button" aria-label="Add playlist">+</button>
+                            <button id="librarian-delete-playlist" class="mini-button playlist-title-button" type="button" aria-label="Delete playlist">-</button>
+                        </div>
+                    </div>
+                    <div id="librarian-playlists" class="playlist-list" aria-label="Playlists"></div>
+                </section>
+
+                <section class="panel librarian-panel librarian-panel--queue" aria-labelledby="queue-heading">
+                    <div class="panel-heading-row">
+                        <h2 id="queue-heading">Queue</h2>
+                        <div class="queue-transport-controls" role="group" aria-label="Queue transport">
+                            <button id="queue-previous" class="queue-transport-button queue-transport-button--previous" type="button" aria-label="Previous song" data-hint="←"></button>
+                            <button id="queue-play-toggle" class="queue-transport-button queue-transport-button--play" type="button" aria-label="Play queue" data-hint="spacebar"></button>
+                            <button id="queue-next" class="queue-transport-button queue-transport-button--next" type="button" aria-label="Next song" data-hint="→"></button>
+                            <button id="queue-shuffle-toggle" class="queue-transport-button queue-transport-button--play-next" type="button" aria-label="Play next mode" aria-pressed="false" data-hint="Play Next / Shuffle"></button>
+                        </div>
+                    </div>
+                    <div class="queue-repeat-note">Playlist repeat is on by default.</div>
+                    <div id="librarian-queue" class="playlist-queue" aria-label="Playlist queue"></div>
+                </section>
+
+                <section class="panel librarian-panel librarian-panel--songs" aria-labelledby="songs-heading">
+                    <div class="panel-heading-row">
+                        <h2 id="songs-heading">Songs</h2>
+                        <div class="librarian-filter-group" role="group" aria-label="Song filters">
+                            <button class="librarian-filter is-active" type="button" data-library-filter="all">All</button>
+                            <button class="librarian-filter" type="button" data-library-filter="saved">Saved</button>
+                            <button class="librarian-filter" type="button" data-library-filter="broadcast">Broadcast</button>
+                        </div>
+                    </div>
+                    <div id="librarian-library-list" class="librarian-list" aria-label="Songs"></div>
+                </section>
+            </div>
+            <div id="librarian-status" class="inline-status librarian-status" aria-live="polite">The Librarian is ready.</div>
+        </div>
+    </section>
+
+    <section class="page-view" data-page-view="radiograph">
+        <div class="app">
+            <section class="radiograph-hero" aria-labelledby="radiograph-title">
+                <div>
+                    <h2 id="radiograph-title">RadioGraph</h2>
+                    <p class="radiograph-lede">Live station playback, song submissions, listener ratings, and rotation signals for the broadcast queue.</p>
+                </div>
+                <div class="radiograph-broadcast-badge" aria-label="Broadcast status">
+                    <span id="radiograph-live-light" class="radiograph-live-light" aria-hidden="true"></span>
+                    <span id="radiograph-live-label">Standby</span>
+                </div>
+            </section>
+
+            <div class="radiograph-grid">
+                <div class="radiograph-column">
+                    <section class="panel radiograph-panel radiograph-panel--station" aria-labelledby="radiograph-station-heading">
+                        <div class="panel-heading-row">
+                            <h2 id="radiograph-station-heading">Station</h2>
+                            <span id="radiograph-listener-count" class="radiograph-stat-chip">listeners pending</span>
+                        </div>
+                        <div class="radiograph-signal" aria-label="Live volume meter">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                            <div id="radiograph-signal-caption" class="radiograph-signal-caption">listeners pending</div>
+                        </div>
+                        <audio id="radiograph-audio" preload="none" crossorigin="anonymous"></audio>
+                        <div class="radiograph-station-controls" role="group" aria-label="Radio controls">
+                            <button id="radiograph-play" class="radiograph-control radiograph-control--play" type="button" aria-label="Play live radio"></button>
+                            <button id="radiograph-mute" class="radiograph-control radiograph-control--mute" type="button" aria-label="Mute live radio" aria-pressed="false"></button>
+                            <button id="radiograph-reconnect" class="radiograph-control radiograph-control--reconnect" type="button" aria-label="Reconnect live radio"></button>
+                        </div>
+                        <div id="radiograph-status" class="inline-status radiograph-status" aria-live="polite">RadioGraph is ready for the stream endpoint.</div>
+                    </section>
+
+                    <section class="panel radiograph-panel radiograph-panel--submit" aria-labelledby="radiograph-submit-heading">
+                        <div class="panel-heading-row">
+                            <h2 id="radiograph-submit-heading">Submit</h2>
+                            <span class="radiograph-stat-chip">MIDI + recipe</span>
+                        </div>
+                        <p class="radiograph-panel-copy">Current Recomposer settings become the broadcast recipe. Audio files are not accepted.</p>
+                        <div id="radiograph-draft-summary" class="radiograph-draft-summary">Load a MIDI in Recomposer to prepare a submission.</div>
+                        <div class="radiograph-submit-actions">
+                            <button id="radiograph-use-current" class="button radiograph-action" type="button">USE CURRENT</button>
+                            <button id="radiograph-submit" class="button radiograph-action radiograph-action--primary" type="button" disabled>SUBMIT TO STATION</button>
+                        </div>
+                        <div id="radiograph-submit-status" class="inline-status radiograph-status" aria-live="polite">Sign in before submitting to the station queue.</div>
+                    </section>
+
+                    <section class="panel radiograph-panel radiograph-panel--popular" aria-labelledby="radiograph-popular-heading">
+                        <div class="panel-heading-row">
+                            <h2 id="radiograph-popular-heading">Popularity</h2>
+                            <span id="radiograph-leaderboard-mode" class="radiograph-stat-chip">all time</span>
+                        </div>
+                        <div id="radiograph-popularity-list" class="radiograph-popularity-list" aria-label="Popular broadcasts">
+                            <div class="radiograph-popularity-item">
+                                <span>
+                                    <span class="radiograph-popularity-title">Waiting for ratings</span>
+                                    <span class="radiograph-popularity-meta">Leaderboards update from listener votes.</span>
+                                </span>
+                                <meter min="0" max="100" value="0">0</meter>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="radiograph-column">
+                    <section class="panel radiograph-panel radiograph-panel--now" aria-labelledby="radiograph-now-heading">
+                        <div class="panel-heading-row">
+                            <h2 id="radiograph-now-heading">Now Playing</h2>
+                            <span id="radiograph-rotation-rank" class="radiograph-rank">Rotation sync</span>
+                        </div>
+                        <div class="radiograph-now-card">
+                            <span class="radiograph-kicker">Current Broadcast</span>
+                            <h3 id="radiograph-now-title">Waiting for station status</h3>
+                            <p id="radiograph-now-meta">The live stream can play before metadata is available.</p>
+                        </div>
+                        <div class="radiograph-rating" aria-label="Rate current song">
+                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="1" aria-label="Rate 1">1</button>
+                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="2" aria-label="Rate 2">2</button>
+                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="3" aria-label="Rate 3">3</button>
+                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="4" aria-label="Rate 4">4</button>
+                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="5" aria-label="Rate 5">5</button>
+                        </div>
+                        <button id="radiograph-save-library" class="button radiograph-action radiograph-action--primary radiograph-save-library" type="button" disabled>SAVE CURRENT SONG TO MY LIBRARY</button>
+                        <div class="radiograph-comments" aria-label="Comments for current broadcast">
+                            <div id="radiograph-comments-list" class="radiograph-comments-list">
+                                <div class="radiograph-comment-empty">Comments will appear here while this song is linked to RadioGraph.</div>
+                            </div>
+                            <div class="radiograph-comment-form">
+                                <input id="radiograph-comment-input" type="text" maxlength="500" placeholder="Comment on this song">
+                                <button id="radiograph-comment-submit" class="button radiograph-action radiograph-action--primary" type="button" disabled>COMMENT</button>
+                            </div>
+                            <div id="radiograph-comment-status" class="inline-status radiograph-status" aria-live="polite">Sign in to comment on the current broadcast.</div>
+                        </div>
+                        <div id="radiograph-rating-status" class="inline-status radiograph-status" aria-live="polite">Ratings affect future rotation weight.</div>
+                    </section>
+
+                    <section class="panel radiograph-panel radiograph-panel--queue" aria-labelledby="radiograph-queue-heading">
+                        <div class="panel-heading-row">
+                            <h2 id="radiograph-queue-heading">Station Queue</h2>
+                            <span id="radiograph-queue-count" class="radiograph-stat-chip">syncing</span>
+                        </div>
+                        <div id="radiograph-queue-list" class="radiograph-queue-list" aria-label="Upcoming station songs">
+                            <div class="radiograph-queue-item">
+                                <span class="radiograph-queue-index">--</span>
+                                <span>
+                                    <span class="radiograph-queue-title">Waiting for station playlist</span>
+                                    <span class="radiograph-queue-meta">The queue syncs from the broadcast server.</span>
+                                </span>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div id="sample-modal" class="modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="sample-modal-title">
+        <div class="modal__content">
+            <h3 id="sample-modal-title">Load MIDI File</h3>
+            <label id="modal-load-button" class="button" for="midi-input">
+                Browse Computer
+                <input type="file" id="midi-input" accept=".mid,.midi">
+            </label>
+            <label for="sample-folder-select">or CHOOSE A FOLDER</label>
+            <select id="sample-folder-select"></select>
+            <label for="sample-midi-select">Choose a file</label>
+            <select id="sample-midi-select"></select>
+            <div class="row">
+                <button id="sample-cancel" type="button">Cancel</button>
+                <button id="sample-choose" type="button">Load</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="auth-modal" class="modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+        <div class="modal__content">
+            <h3 id="auth-modal-title">Account</h3>
+            <label for="auth-email">Email</label>
+            <input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email">
+            <div class="row">
+                <button id="auth-sign-in" type="button">Send Sign-In Link</button>
+                <button id="auth-sign-out" type="button" disabled>Sign Out</button>
+                <button id="auth-close" type="button">Close</button>
+            </div>
+            <div id="auth-status" class="auth-status">Not signed in. Your cloud settings are currently unavailable.</div>
+        </div>
+    </div>
+
+    <div id="arrangements-modal" class="modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="arrangements-modal-title">
+        <div class="modal__content">
+            <h3 id="arrangements-modal-title">Load Arrangement</h3>
+            <label for="arrangements-list">Saved arrangements</label>
+            <div id="arrangements-list" class="arrangements-list" role="listbox" aria-label="Saved arrangements"></div>
+            <div id="arrangements-status" class="auth-status">Choose a saved arrangement to load.</div>
+            <div class="row">
+                <button id="arrangements-cancel" type="button">Cancel</button>
+                <button id="arrangements-load" type="button">Load</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="save-arrangement-modal" class="modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="save-arrangement-modal-title">
+        <div class="modal__content">
+            <h3 id="save-arrangement-modal-title">Save Arrangement</h3>
+            <label for="save-arrangement-name">Arrangement name</label>
+            <input id="save-arrangement-name" type="text" maxlength="120" placeholder="Arrangement name">
+            <div id="save-arrangement-status" class="auth-status">Use an existing name to overwrite, or a new name to save separately.</div>
+            <div class="row">
+                <button id="save-arrangement-cancel" type="button">Cancel</button>
+                <button id="save-arrangement-confirm" type="button">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="playlist-create-modal" class="modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="playlist-create-modal-title">
+        <div class="modal__content">
+            <h3 id="playlist-create-modal-title">Add Playlist</h3>
+            <label for="playlist-create-name">Playlist name</label>
+            <input id="playlist-create-name" type="text" maxlength="80" placeholder="Playlist name">
+            <div id="playlist-create-status" class="auth-status">Name the playlist to add it to the Librarian.</div>
+            <div class="row">
+                <button id="playlist-create-cancel" type="button">Cancel</button>
+                <button id="playlist-create-confirm" type="button">Add</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="playlist-delete-modal" class="modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="playlist-delete-modal-title">
+        <div class="modal__content">
+            <h3 id="playlist-delete-modal-title">Delete Playlist</h3>
+            <p id="playlist-delete-message">Delete this playlist? Songs will stay in your library.</p>
+            <div class="row">
+                <button id="playlist-delete-cancel" type="button">Cancel</button>
+                <button id="playlist-delete-confirm" type="button">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="favorites-modal" class="modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="favorites-modal-title">
+        <div class="modal__content">
+            <h3 id="favorites-modal-title">Save Favorite</h3>
+            <label for="favorite-name-input">Preset name</label>
+            <input id="favorite-name-input" type="text" maxlength="60" placeholder="My preset">
+            <div class="row">
+                <button id="favorite-save" type="button">Save</button>
+                <button id="favorite-cancel" type="button">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="favorites-delete-modal" class="modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="favorites-delete-modal-title">
+        <div class="modal__content">
+            <h3 id="favorites-delete-modal-title">Confirm Delete</h3>
+            <p id="favorites-delete-message">Delete this favorite?</p>
+            <div class="row">
+                <button id="favorite-delete-confirm" type="button">Delete</button>
+                <button id="favorite-delete-cancel" type="button">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/vendor/tonejs/Midi.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.3/dist/hls.min.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/player-core.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
