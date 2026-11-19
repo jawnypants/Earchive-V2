@@ -2472,6 +2472,22 @@ function resolveAssetPath(entryPath, rootPrefix, defaultPrefix) {
     return new URL(cleaned, window.location.href).href;
 }
 
+function resolveSavedTuningId(tuningId) {
+    const legacyBase = "https://jawnypants.github.io/MidiTuningAssets/";
+    const legacySources = [
+        ["assets/ScalaLite/", "scalaLiteBaseUrl"],
+        ["assets/Scala%20Archive/", "scalaFullBaseUrl"]
+    ];
+    for (const [legacyPath, configKey] of legacySources) {
+        const legacyPrefix = legacyBase + legacyPath;
+        if (tuningId.startsWith(legacyPrefix)) {
+            const currentBase = normalizeBaseUrl(APP_CONFIG[configKey], DEFAULT_CONFIG[configKey]);
+            return currentBase + tuningId.slice(legacyPrefix.length);
+        }
+    }
+    return tuningId;
+}
+
 function resolveMidiAssetUrl(entryUrl) {
     if (!entryUrl || typeof entryUrl !== "string") {
         return entryUrl;
@@ -2999,7 +3015,10 @@ async function applyArrangementSettingsSnapshot(snapshot, options = {}) {
         currentTempoBpm = tempoPercentToBpm(currentTempoPercent);
         customTempoActive = currentTempoPercent !== 100;
         applyTempoChange();
-        const nextTuning = snapshot.tuning_id || DEFAULT_TUNING_ID;
+        const savedTuningId = typeof snapshot.tuning_id === "string" && snapshot.tuning_id
+            ? snapshot.tuning_id
+            : DEFAULT_TUNING_ID;
+        const nextTuning = resolveSavedTuningId(savedTuningId);
         if (tuningSelect) {
             const option = tuningSelect.querySelector(`option[value="${escapeCssValue(nextTuning)}"]`);
             if (option) {
@@ -5514,7 +5533,7 @@ async function fetchScalaTuning(path) {
     if (tuningCache.has(path)) {
         return tuningCache.get(path);
     }
-    const response = await fetch(encodeURI(path));
+    const response = await fetch(path.replaceAll("#", "%23"));
     if (!response.ok) {
         throw new Error(`Unable to load ${path}`);
     }
