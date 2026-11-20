@@ -39,6 +39,7 @@
                 <button class="tab is-active" type="button" data-page="recomposer" aria-current="page">Recomposer</button>
                 <button class="tab" type="button" data-page="librarian">Librarian</button>
                 <button class="tab" type="button" data-page="radiograph">RadioGraph</button>
+                <button id="station-control-tab" class="tab is-hidden" type="button" data-page="station-control">Control Panel</button>
             </nav>
             <div class="auth-quick">
                 <button id="auth-launch" type="button">Sign In</button>
@@ -54,6 +55,10 @@
         </div>
 
         <div class="app">
+            <aside id="recomposer-news" class="panel recomposer-news is-hidden" aria-labelledby="recomposer-news-heading">
+                <h2 id="recomposer-news-heading"></h2>
+                <p id="recomposer-news-body"></p>
+            </aside>
             <div class="recomposer-layout">
                 <div class="recomposer-left">
                     <section class="panel recomposer-left-panel">
@@ -85,6 +90,17 @@
                             </div>
                             <div class="row tight transport-progress-row">
                                 <input id="progress" type="range" min="0" max="0" step="0.01" value="0">
+                            </div>
+                            <div id="keyframe-editor" class="keyframe-editor">
+                                <div id="keyframe-lane" class="keyframe-lane">
+                                    <span class="keyframe-lane-label" aria-hidden="true">Keyframes</span>
+                                    <button id="keyframe-place" class="keyframe-place" type="button" aria-label="Choose a keyframe position" title="Click the timeline to choose a position. With the keyboard, use the progress slider and press Enter here." disabled></button>
+                                    <div id="keyframe-markers" class="keyframe-markers" role="group" aria-label="Arrangement keyframes"></div>
+                                </div>
+                                <div class="keyframe-caption">
+                                    <label id="keyframe-confirmation" class="is-hidden"><input id="keyframe-confirm" type="checkbox"> Keyframe</label>
+                                    <span id="keyframe-status" aria-live="polite">Keyframe 1 holds the starting settings.</span>
+                                </div>
                             </div>
                             <div class="transport-divider" aria-hidden="true"></div>
                             <div class="panel-heading-row transport-heading-row">
@@ -233,11 +249,12 @@
                         <h2 id="songs-heading">Songs</h2>
                         <div class="librarian-filter-group" role="group" aria-label="Song filters">
                             <button class="librarian-filter is-active" type="button" data-library-filter="all">All</button>
-                            <button class="librarian-filter" type="button" data-library-filter="saved">Saved</button>
-                            <button class="librarian-filter" type="button" data-library-filter="broadcast">Broadcast</button>
+                            <button class="librarian-filter" type="button" data-library-filter="saved">My Saved</button>
+                            <button class="librarian-filter" type="button" data-library-filter="broadcast">Saved From Broadcast</button>
                         </div>
                     </div>
                     <div id="librarian-library-list" class="librarian-list" aria-label="Songs"></div>
+                    <button id="librarian-edit-tags" class="button librarian-action" type="button" disabled>Edit Tags</button>
                 </section>
             </div>
             <div id="librarian-status" class="inline-status librarian-status" aria-live="polite">The Librarian is ready.</div>
@@ -249,7 +266,7 @@
             <section class="radiograph-hero" aria-labelledby="radiograph-title">
                 <div>
                     <h2 id="radiograph-title">RadioGraph</h2>
-                    <p class="radiograph-lede">Live station playback, song submissions, listener ratings, and rotation signals for the broadcast queue.</p>
+                    <p id="radiograph-mode-status" class="radiograph-lede" role="status">Loading the broadcast mode…</p>
                 </div>
                 <div class="radiograph-broadcast-badge" aria-label="Broadcast status">
                     <span id="radiograph-live-light" class="radiograph-live-light" aria-hidden="true"></span>
@@ -283,17 +300,19 @@
                     </section>
 
                     <section class="panel radiograph-panel radiograph-panel--submit" aria-labelledby="radiograph-submit-heading">
-                        <div class="panel-heading-row">
-                            <h2 id="radiograph-submit-heading">Submit</h2>
-                            <span class="radiograph-stat-chip">MIDI + recipe</span>
-                        </div>
-                        <p class="radiograph-panel-copy">Current Recomposer settings become the broadcast recipe. Audio files are not accepted.</p>
-                        <div id="radiograph-draft-summary" class="radiograph-draft-summary">Load a MIDI in Recomposer to prepare a submission.</div>
+                        <h2 id="radiograph-submit-heading">SUBMIT FOR BROADCAST</h2>
+                        <div id="radiograph-broadcast-arrangement" class="radiograph-draft-summary" hidden></div>
                         <div class="radiograph-submit-actions">
-                            <button id="radiograph-use-current" class="button radiograph-action" type="button">USE CURRENT</button>
+                            <button id="radiograph-load-arrangement" class="button radiograph-action" type="button">LOAD ARRANGEMENT FOR BROADCAST</button>
                             <button id="radiograph-submit" class="button radiograph-action radiograph-action--primary" type="button" disabled>SUBMIT TO STATION</button>
                         </div>
-                        <div id="radiograph-submit-status" class="inline-status radiograph-status" aria-live="polite">Sign in before submitting to the station queue.</div>
+                        <div id="radiograph-submit-status" class="inline-status radiograph-status" aria-live="polite">Save your arrangement under a new name in Recomposer before loading it here.</div>
+                    </section>
+
+                    <section class="panel radiograph-panel" aria-labelledby="radiograph-published-heading">
+                        <h2 id="radiograph-published-heading">Published Songs</h2>
+                        <p id="radiograph-published-status" class="radiograph-panel-copy" role="status">Sign in to see your published songs.</p>
+                        <ul id="radiograph-published-list" class="radiograph-queue-list radiograph-published-list" aria-labelledby="radiograph-published-heading"></ul>
                     </section>
 
                     <section class="panel radiograph-panel radiograph-panel--popular" aria-labelledby="radiograph-popular-heading">
@@ -365,6 +384,41 @@
         </div>
     </section>
 
+    <section class="page-view" data-page-view="station-control" aria-labelledby="station-control-heading">
+        <div class="app">
+            <h2 id="station-control-heading">Control Panel</h2>
+            <div class="station-control-grid">
+                <form id="station-mode-form" class="panel station-control-form">
+                    <h3>RadioGraph Show</h3>
+                    <label for="station-mode-select">Active show</label>
+                    <select id="station-mode-select" required disabled></select>
+                    <label for="station-include-tags">Include tags</label>
+                    <input id="station-include-tags" type="text" aria-describedby="station-include-hint" disabled>
+                    <small id="station-include-hint">Separate tags with commas. Songs can match any listed tag. Leave blank to include all tags.</small>
+                    <label for="station-exclude-tags">Exclude tags</label>
+                    <input id="station-exclude-tags" type="text" aria-describedby="station-exclude-hint" disabled>
+                    <small id="station-exclude-hint">Separate tags with commas. Any excluded tag takes priority.</small>
+                    <div class="row">
+                        <button id="station-mode-save" class="button" type="submit" disabled>Change Show</button>
+                    </div>
+                    <p id="station-mode-status" class="inline-status" role="status"></p>
+                </form>
+                <form id="station-news-form" class="panel station-control-form">
+                    <h3>Recomposer News</h3>
+                    <label for="station-news-title">Headline</label>
+                    <input id="station-news-title" type="text" maxlength="100" required disabled>
+                    <label for="station-news-body">Announcement</label>
+                    <textarea id="station-news-body" maxlength="1600" rows="5" required disabled></textarea>
+                    <div class="row">
+                        <button id="station-news-publish" class="button" type="submit" disabled>Publish News</button>
+                        <button id="station-news-remove" class="button" type="button" disabled>Remove News</button>
+                    </div>
+                    <p id="station-news-status" class="inline-status" role="status"></p>
+                </form>
+            </div>
+        </div>
+    </section>
+
     <div id="sample-modal" class="modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="sample-modal-title">
         <div class="modal__content">
             <h3 id="sample-modal-title">Load MIDI File</h3>
@@ -415,6 +469,8 @@
             <h3 id="save-arrangement-modal-title">Save Arrangement</h3>
             <label for="save-arrangement-name">Arrangement name</label>
             <input id="save-arrangement-name" type="text" maxlength="120" placeholder="Arrangement name">
+            <label for="save-arrangement-tags">Tags (optional)</label>
+            <input id="save-arrangement-tags" type="text" maxlength="420" placeholder="e.g. Christmas, Jazz">
             <div id="save-arrangement-status" class="auth-status">Use an existing name to overwrite, or a new name to save separately.</div>
             <div class="row">
                 <button id="save-arrangement-cancel" type="button">Cancel</button>
@@ -422,6 +478,19 @@
             </div>
         </div>
     </div>
+
+    <dialog id="librarian-tags-dialog" class="librarian-tags-dialog" aria-labelledby="librarian-tags-heading">
+        <form class="modal__content">
+            <h3 id="librarian-tags-heading">Edit Tags</h3>
+            <label for="librarian-tags-input">Tags</label>
+            <input id="librarian-tags-input" type="text" maxlength="420" placeholder="e.g. Christmas, Jazz">
+            <div id="librarian-tags-status" class="auth-status" role="status"></div>
+            <div class="row">
+                <button id="librarian-tags-cancel" type="button">Cancel</button>
+                <button id="librarian-tags-save" type="submit">Save Tags</button>
+            </div>
+        </form>
+    </dialog>
 
     <div id="playlist-create-modal" class="modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="playlist-create-modal-title">
         <div class="modal__content">

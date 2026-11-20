@@ -69,6 +69,7 @@ self.addEventListener("message", (event) => {
             payload: {
                 name: midi.name || "",
                 duration: Number.isFinite(midi.duration) ? midi.duration : 0,
+                durationTicks: midi.durationTicks,
                 tracks,
                 tempos
             }

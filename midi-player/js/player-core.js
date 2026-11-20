@@ -11,13 +11,14 @@
 
     class FluidSynthRenderer {
     constructor(options = {}) {
-            this.modulePromise = null;
+            this.initializationPromise = null;
             this.module = null;
             this.audioContext = null;
             this.settingsPtr = null;
             this.synthPtr = null;
             this.playerPtr = null;
             this.audioNode = null;
+            this.audioGeneration = 0;
             this.outputGain = null;
             this.recordDestination = null;
             this.workletModulePromise = null;
@@ -33,6 +34,7 @@
             this.totalTicks = 0;
             this.isRendering = false;
             this.onPlaybackComplete = null;
+            this.onPlaybackPosition = null;
             this.channelPrograms = new Map();
             this.loopEnabled = false;
             this.baseSongDuration = 0;
@@ -50,7 +52,6 @@
             this.tuningBank = 1;
             this.tuningProg = 0;
             this.channelTuningAssignments = new Map();
-        this.programRefreshHandle = null;
         this.progressCallback = null;
         this.moduleUrl = options.moduleUrl || "";
         this.resolvePath = typeof options.resolvePath === "function"
@@ -80,24 +81,30 @@
                 return;
             }
             this.audioContext = audioContext;
+            if (!this.initializationPromise) {
+                this.initializationPromise = this.initializeAudio().catch(error => {
+                    this.initializationPromise = null;
+                    throw error;
+                });
+            }
+            await this.initializationPromise;
+        }
+
+        async initializeAudio() {
             this.reportProgress(0.2);
-            if (!this.modulePromise) {
+            if (!this.module) {
                 if (!this.moduleUrl) {
                     throw new Error("Fluidsynth module URL is not set.");
                 }
-                this.modulePromise = import(/* webpackIgnore: true */ this.moduleUrl)
-                    .then(mod => mod.default({
-                        locateFile: (path) => this.resolvePath(path)
-                    }));
-            }
-            if (!this.module) {
-                this.module = await this.modulePromise;
-                await this.module.ready;
+                const { default: createModule } = await import(/* webpackIgnore: true */ this.moduleUrl);
+                const module = await createModule({ locateFile: path => this.resolvePath(path) });
+                await module.ready;
+                this.module = module;
                 this.reportProgress(0.5);
                 this.setupApi();
                 this.initializeSynth();
-                await this.loadSoundFont();
             }
+            await this.loadSoundFont();
             if (!this.audioNode) {
                 await this.createProcessor();
             }
@@ -114,7 +121,6 @@
             this._new_fluid_synth = m.cwrap("new_fluid_synth", "number", ["number"]);
             this._delete_fluid_synth = m.cwrap("delete_fluid_synth", null, ["number"]);
             this._fluid_synth_sfload = m.cwrap("fluid_synth_sfload", "number", ["number", "string", "number"]);
-            this._fluid_synth_bank_select = m.cwrap("fluid_synth_bank_select", "number", ["number", "number", "number"]);
             this._fluid_synth_write_float = m.cwrap("fluid_synth_write_float", "number", ["number", "number", "number", "number", "number", "number", "number", "number"]);
             this._fluid_synth_program_change = m.cwrap("fluid_synth_program_change", "number", ["number", "number", "number"]);
             this._new_fluid_player = m.cwrap("new_fluid_player", "number", ["number"]);
@@ -133,11 +139,7 @@
             this._fluid_synth_activate_tuning = m.cwrap("fluid_synth_activate_tuning", "number", ["number", "number", "number", "number", "number"]);
             this._fluid_player_set_loop = m.cwrap("fluid_player_set_loop", "number", ["number", "number"]);
             this._fluid_synth_all_notes_off = m.cwrap("fluid_synth_all_notes_off", "number", ["number", "number"]);
-            if (typeof m._fluid_synth_cc === "function") {
-                this._fluid_synth_cc = m.cwrap("fluid_synth_cc", "number", ["number", "number", "number", "number"]);
-            } else {
-                this._fluid_synth_cc = null;
-            }
+            this._fluid_synth_cc = m.cwrap("fluid_synth_cc", "number", ["number", "number", "number", "number"]);
         }
 
         initializeSynth() {
@@ -148,6 +150,8 @@
             const sampleRate = this.audioContext.sampleRate;
             this._fluid_settings_setnum(this.settingsPtr, "synth.sample-rate", sampleRate);
             this._fluid_settings_setstr(this.settingsPtr, "player.timing-source", "sample");
+            this._fluid_settings_setint(this.settingsPtr, "player.reset-synth", this.loopEnabled ? 0 : 1);
+            this._fluid_settings_setstr(this.settingsPtr, "synth.midi-bank-select", "xg");
             this._fluid_settings_setint(this.settingsPtr, "synth.polyphony", 256);
             this.synthPtr = this._new_fluid_synth(this.settingsPtr);
         }
@@ -248,7 +252,7 @@
             if (addResult !== 0) {
                 throw new Error("Fluidsynth could not load the MIDI data.");
             }
-            this.totalTicks = 0;
+            this.totalTicks = tempoOptions.totalTicks || 0;
             this.refreshTotalTicks();
             this.baseSongDuration = durationSeconds || 0;
             this.songDuration = this.baseSongDuration;
@@ -256,6 +260,7 @@
                 this.baseBpm = tempoOptions.baseBpm;
             }
             this.isRendering = false;
+            this.resetAudioQueue();
             this.channelPrograms = new Map();
             assignments.forEach(({ channel, program, bank }) => {
                 this.channelPrograms.set(channel, {
@@ -284,11 +289,11 @@
             this._fluid_player_seek(this.playerPtr, tickPosition);
             this._applyTempo(this.currentBpm || this.baseBpm || this.defaultTempoBpm);
             this._applyStoredTuning();
-            this.applyProgramSnapshot();
             this._fluid_player_play(this.playerPtr);
+            this.applyProgramSnapshot();
             this.playbackStartTick = tickPosition;
             this.isRendering = true;
-            this.scheduleProgramRefresh();
+            this.resetAudioQueue();
             return true;
         }
 
@@ -311,6 +316,7 @@
             this.waitForPlayerStop();
             this.silence();
             this.isRendering = false;
+            this.resetAudioQueue();
             return seconds;
         }
 
@@ -319,8 +325,9 @@
                 return;
             }
             this._fluid_player_play(this.playerPtr);
+            this.applyProgramSnapshot();
             this.isRendering = true;
-            this.scheduleProgramRefresh();
+            this.resetAudioQueue();
         }
 
         stop() {
@@ -332,10 +339,7 @@
                 this.silence();
             }
             this.isRendering = false;
-            if (this.programRefreshHandle) {
-                clearTimeout(this.programRefreshHandle);
-                this.programRefreshHandle = null;
-            }
+            this.resetAudioQueue();
         }
 
         async seek(seconds) {
@@ -353,10 +357,15 @@
             this._applyStoredTuning();
             this.applyProgramSnapshot();
             this.isRendering = false;
+            this.resetAudioQueue();
         }
 
         setLoopEnabled(flag) {
             this.loopEnabled = flag;
+            if (this.settingsPtr) {
+                // The Recomposer keeps its selected channel voices between repeats.
+                this._fluid_settings_setint(this.settingsPtr, "player.reset-synth", flag ? 0 : 1);
+            }
             if (this.playerPtr) {
                 this._fluid_player_set_loop(this.playerPtr, 0);
             }
@@ -467,12 +476,8 @@
             if (!this.module || !this.synthPtr) {
                 return;
             }
-            if (!this._fluid_synth_program_change) {
-                this._fluid_synth_program_change = this.module.cwrap("fluid_synth_program_change", "number", ["number", "number", "number"]);
-            }
-            if (this._fluid_synth_bank_select) {
-                this._fluid_synth_bank_select(this.synthPtr, channel, bank);
-            }
+            this._fluid_synth_cc(this.synthPtr, channel, 0, bank === 128 ? 127 : 0);
+            this._fluid_synth_cc(this.synthPtr, channel, 32, 0);
             this._fluid_synth_program_change(this.synthPtr, channel, program);
             this.channelPrograms.set(channel, { bank, program });
             this._selectTuningOnChannel(channel);
@@ -517,17 +522,8 @@
             if (!this.channelPrograms || !this.channelPrograms.size) {
                 return;
             }
-            this.channelPrograms.forEach((entry, channel) => {
-                const bank = Number.isFinite(entry?.bank) ? entry.bank : 0;
-                const program = Number.isFinite(entry?.program) ? entry.program : 0;
-                if (this._fluid_synth_bank_select) {
-                    this._fluid_synth_bank_select(this.synthPtr, channel, bank);
-                }
-                if (!this._fluid_synth_program_change) {
-                    this._fluid_synth_program_change = this.module.cwrap("fluid_synth_program_change", "number", ["number", "number", "number"]);
-                }
-                this._fluid_synth_program_change(this.synthPtr, channel, program);
-                this._selectTuningOnChannel(channel);
+            this.channelPrograms.forEach(({ bank, program }, channel) => {
+                this.programChange(channel, program, bank);
             });
         }
 
@@ -539,13 +535,20 @@
             return this.ticksToSeconds(tick);
         }
 
-        handleWorkletRequest(frames) {
-            if (!this.audioNode || this.useLegacyProcessor) {
+        resetAudioQueue() {
+            if (!this.audioNode?.port) return;
+            this.audioGeneration++;
+            this.audioNode.port.postMessage({ type: "reset", generation: this.audioGeneration });
+        }
+
+        handleWorkletRequest(frames, generation) {
+            if (!this.audioNode || this.useLegacyProcessor || generation !== this.audioGeneration) {
                 return;
             }
             const { left, right } = this.renderFrames(frames);
             this.audioNode.port.postMessage({
                 type: "data",
+                generation,
                 left,
                 right
             }, [left.buffer, right.buffer]);
@@ -618,9 +621,19 @@
                 };
             }
             this.ensureHeapViews(frames);
-            this._fluid_synth_write_float(this.synthPtr, frames,
-                this.leftPtr, 0, 1,
-                this.rightPtr, 0, 1);
+            if (this.onPlaybackPosition) {
+                // FluidSynth processes MIDI in blocks of 64 samples. Check for
+                // a keyframe between blocks, including inside a worklet buffer.
+                for (let offset = 0; offset < frames; offset += 64) {
+                    const length = Math.min(64, frames - offset);
+                    this._fluid_synth_write_float(this.synthPtr, length,
+                        this.leftPtr, offset, 1, this.rightPtr, offset, 1);
+                    this.onPlaybackPosition(this.getCurrentSeconds(), length / this.audioContext.sampleRate);
+                }
+            } else {
+                this._fluid_synth_write_float(this.synthPtr, frames,
+                    this.leftPtr, 0, 1, this.rightPtr, 0, 1);
+            }
             const leftCopy = new Float32Array(frames);
             leftCopy.set(this.leftView.subarray(0, frames));
             const rightCopy = new Float32Array(frames);
@@ -638,18 +651,6 @@
                 }
             }
             return { left: leftCopy, right: rightCopy };
-        }
-
-        scheduleProgramRefresh() {
-            if (this.programRefreshHandle) {
-                clearTimeout(this.programRefreshHandle);
-            }
-            this.programRefreshHandle = setTimeout(() => {
-                this.programRefreshHandle = null;
-                this.applyProgramSnapshot();
-                // Reapply once more after the player has had time to settle post-seek.
-                setTimeout(() => this.applyProgramSnapshot(), 30);
-            }, 0);
         }
 
         async createProcessor() {
@@ -672,12 +673,11 @@
                 this.audioNode.port.onmessage = (event) => {
                     if (event.data?.type === "request") {
                         const frames = event.data.frames || this.blockSize;
-                        this.handleWorkletRequest(frames);
+                        this.handleWorkletRequest(frames, event.data.generation);
                     }
                 };
                 this.useLegacyProcessor = false;
                 this.updateRouting();
-                this.handleWorkletRequest(this.blockSize);
                 return;
             }
 
@@ -728,7 +728,7 @@
                 return 0;
             }
             const ratio = Math.max(0, Math.min(1, seconds / this.songDuration));
-            return Math.floor(ratio * this.totalTicks);
+            return Math.floor(ratio * this.totalTicks + 1e-7);
         }
 
         ticksToSeconds(ticks) {

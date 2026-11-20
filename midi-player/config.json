@@ -1,5 +1,5 @@
 {
-  "fluidsynthBaseUrl": "https://assets.earchive.stream/",
+  "fluidsynthBaseUrl": "assets/vendor/fluidsynth/",
   "soundfontBaseUrl": "https://assets.earchive.stream/earchive-library-v1/assets/soundfonts/",
   "midiBaseUrl": "https://assets.earchive.stream/earchive-library-v1/assets/midi/",
   "sampleMidiManifestUrl": "https://assets.earchive.stream/earchive-library-v1/assets/midi/manifest.json",
@@ -10,8 +10,8 @@
   "soundfontFallbacksEnabled": true,
   "supabaseUrl": "https://higyezaorqsntngzbncw.supabase.co",
   "supabasePublishableKey": "sb_publishable_WZu_k9iC97Nj6uBdvbs83A_dBHabKgu",
-  "radioStreamUrl": "https://example.com/hls/stream.m3u8",
-  "radioSubmitUrl": "https://example.com/api/radiograph/submit",
-  "radioStatusUrl": "https://example.com/api/radiograph/status",
-  "radioRecipeUrl": "https://example.com/api/radiograph/recipe"
+  "radioStreamUrl": "https://radio.earchive.stream/hls/stream.m3u8",
+  "radioSubmitUrl": "https://radio.earchive.stream/api/radiograph/submit",
+  "radioStatusUrl": "https://radio.earchive.stream/api/radiograph/status",
+  "radioRecipeUrl": "https://radio.earchive.stream/api/radiograph/recipe"
 }

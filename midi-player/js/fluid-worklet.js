@@ -4,9 +4,15 @@ class FluidsynthWorkletProcessor extends AudioWorkletProcessor {
         this.blockSize = options?.processorOptions?.blockSize || 1024;
         this.queue = [];
         this.pendingRequests = 0;
+        this.generation = 0;
         this.port.onmessage = (event) => {
-            const { type, left, right } = event.data || {};
-            if (type === "data" && left && right) {
+            const { type, generation, left, right } = event.data || {};
+            if (type === "reset") {
+                this.generation = generation;
+                this.queue = [];
+                this.pendingRequests = 0;
+                this.fillQueue();
+            } else if (type === "data" && generation === this.generation && left && right) {
                 this.queue.push({ left, right });
                 this.pendingRequests = Math.max(0, this.pendingRequests - 1);
                 this.fillQueue();
@@ -22,7 +28,7 @@ class FluidsynthWorkletProcessor extends AudioWorkletProcessor {
     }
 
     requestData() {
-        this.port.postMessage({ type: "request", frames: this.blockSize });
+        this.port.postMessage({ type: "request", frames: this.blockSize, generation: this.generation });
         this.pendingRequests += 1;
     }
 

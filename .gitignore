@@ -19,6 +19,8 @@ assets/fluidsynth/
 **/fluidsynth.data
 **/fluidsynth.js
 **/fluidsynth.wasm
+!midi-player/assets/vendor/fluidsynth/fluidsynth.js
+!midi-player/assets/vendor/fluidsynth/fluidsynth.wasm
 *.log
 *.tmp
 *.swp

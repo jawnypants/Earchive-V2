@@ -24,6 +24,18 @@ const recordButton = document.getElementById("record");
 const progressBar = document.getElementById("progress");
 const progressElapsed = document.getElementById("progress-elapsed");
 const progressRemaining = document.getElementById("progress-remaining");
+const keyframePlace = document.getElementById("keyframe-place");
+const keyframeMarkers = document.getElementById("keyframe-markers");
+const keyframeConfirmation = document.getElementById("keyframe-confirmation");
+const keyframeConfirm = document.getElementById("keyframe-confirm");
+const keyframeStatus = document.getElementById("keyframe-status");
+let arrangementKeyframes = [];
+let activeKeyframe = null;
+let keyframeCandidate = null;
+let loopRestartTimer = null;
+let playbackRequest = 0;
+let tuningSelectionRequest = 0;
+const keyframeTuningRequests = new WeakMap();
 const loopToggle = document.getElementById("loop-toggle");
 const tempoSlider = document.getElementById("tempo-slider");
 const tempoValue = document.getElementById("tempo-value");
@@ -89,10 +101,31 @@ const arrangementsCancelButton = document.getElementById("arrangements-cancel");
 const arrangementsLoadButton = document.getElementById("arrangements-load");
 const saveArrangementModal = document.getElementById("save-arrangement-modal");
 const saveArrangementNameInput = document.getElementById("save-arrangement-name");
+const saveArrangementTagsInput = document.getElementById("save-arrangement-tags");
 const saveArrangementStatus = document.getElementById("save-arrangement-status");
 const saveArrangementCancelButton = document.getElementById("save-arrangement-cancel");
 const saveArrangementConfirmButton = document.getElementById("save-arrangement-confirm");
 const pageTabs = Array.from(document.querySelectorAll(".app-tabs .tab[data-page]"));
+const stationControlTab = document.getElementById("station-control-tab");
+const tabsAuthRow = stationControlTab.closest(".tabs-auth-row");
+const stationModeForm = document.getElementById("station-mode-form");
+const stationModeSelect = document.getElementById("station-mode-select");
+const stationIncludeTags = document.getElementById("station-include-tags");
+const stationExcludeTags = document.getElementById("station-exclude-tags");
+let stationModes = new Map();
+const stationModeSave = document.getElementById("station-mode-save");
+const stationModeStatus = document.getElementById("station-mode-status");
+const stationNewsForm = document.getElementById("station-news-form");
+const stationNewsTitle = document.getElementById("station-news-title");
+const stationNewsBody = document.getElementById("station-news-body");
+const stationNewsPublish = document.getElementById("station-news-publish");
+const stationNewsRemove = document.getElementById("station-news-remove");
+const stationNewsStatus = document.getElementById("station-news-status");
+const recomposerNews = document.getElementById("recomposer-news");
+const recomposerNewsHeading = document.getElementById("recomposer-news-heading");
+const recomposerNewsBody = document.getElementById("recomposer-news-body");
+let stationOperatorId = null;
+let recomposerNewsRequest = 0;
 const pageViews = Array.from(document.querySelectorAll("[data-page-view]"));
 const librarianSaveCurrentButton = document.getElementById("librarian-save-current");
 const librarianImportButton = document.getElementById("librarian-import");
@@ -104,6 +137,11 @@ const librarianNowTitle = document.getElementById("librarian-now-title");
 const librarianNowMeta = document.getElementById("librarian-now-meta");
 const librarianStatus = document.getElementById("librarian-status");
 const librarianLibraryList = document.getElementById("librarian-library-list");
+const librarianEditTags = document.getElementById("librarian-edit-tags");
+const librarianTagsDialog = document.getElementById("librarian-tags-dialog");
+const librarianTagsInput = document.getElementById("librarian-tags-input");
+const librarianTagsStatus = document.getElementById("librarian-tags-status");
+const librarianTagsSave = document.getElementById("librarian-tags-save");
 const librarianQueue = document.getElementById("librarian-queue");
 const librarianPlaylists = document.getElementById("librarian-playlists");
 const librarianAddPlaylistButton = document.getElementById("librarian-add-playlist");
@@ -127,15 +165,16 @@ const radiographPlayButton = document.getElementById("radiograph-play");
 const radiographMuteButton = document.getElementById("radiograph-mute");
 const radiographReconnectButton = document.getElementById("radiograph-reconnect");
 const radiographStatus = document.getElementById("radiograph-status");
+const radiographModeStatus = document.getElementById("radiograph-mode-status");
 const radiographLiveLight = document.getElementById("radiograph-live-light");
 const radiographLiveLabel = document.getElementById("radiograph-live-label");
 const radiographListenerCount = document.getElementById("radiograph-listener-count");
 const radiographSignal = document.querySelector(".radiograph-signal");
 const radiographSignalBars = Array.from(document.querySelectorAll(".radiograph-signal > span"));
 const radiographSignalCaption = document.getElementById("radiograph-signal-caption");
-const radiographUseCurrentButton = document.getElementById("radiograph-use-current");
+const radiographLoadArrangementButton = document.getElementById("radiograph-load-arrangement");
 const radiographSubmitButton = document.getElementById("radiograph-submit");
-const radiographDraftSummary = document.getElementById("radiograph-draft-summary");
+const radiographBroadcastArrangement = document.getElementById("radiograph-broadcast-arrangement");
 const radiographSubmitStatus = document.getElementById("radiograph-submit-status");
 const radiographRatingStatus = document.getElementById("radiograph-rating-status");
 const radiographRatingButtons = Array.from(document.querySelectorAll("[data-radiograph-rating]"));
@@ -145,6 +184,8 @@ const radiographNowMeta = document.getElementById("radiograph-now-meta");
 const radiographRotationRank = document.getElementById("radiograph-rotation-rank");
 const radiographQueueList = document.getElementById("radiograph-queue-list");
 const radiographQueueCount = document.getElementById("radiograph-queue-count");
+const radiographPublishedList = document.getElementById("radiograph-published-list");
+const radiographPublishedStatus = document.getElementById("radiograph-published-status");
 const radiographPopularityList = document.getElementById("radiograph-popularity-list");
 const radiographLeaderboardMode = document.getElementById("radiograph-leaderboard-mode");
 const radiographCommentsList = document.getElementById("radiograph-comments-list");
@@ -160,9 +201,10 @@ if (songTitle) {
 }
 
 function setActivePage(pageName) {
-    if (!pageName) {
+    if (!pageName || (pageName === "station-control" && !stationOperatorId)) {
         return;
     }
+    const enteringStationControl = pageName === "station-control" && !stationControlTab.classList.contains("is-active");
     pageTabs.forEach((tab) => {
         const isActive = tab.dataset.page === pageName;
         tab.classList.toggle("is-active", isActive);
@@ -175,6 +217,12 @@ function setActivePage(pageName) {
     pageViews.forEach((view) => {
         view.classList.toggle("is-active", view.dataset.pageView === pageName);
     });
+    if (pageName === "radiograph") {
+        setTimeout(refreshRadiographStationStatus, 0);
+    }
+    if (enteringStationControl) {
+        loadStationControl();
+    }
     if (pageName === "librarian") {
         setTimeout(() => {
             loadLibrarianSavedSongs().catch((error) => {
@@ -223,7 +271,15 @@ let activeLibrarianLoadToken = 0;
 let activeLoadedLibrarianItemId = null;
 const QUEUE_PREVIOUS_SECOND_PRESS_MS = 2400;
 let radiographRating = 0;
-let radiographDraftReady = false;
+let radiographBroadcast = null;
+let radiographMode = null;
+let radiographSubmitting = false;
+let radiographLatestStationStatus = null;
+let radiographStationRequest = null;
+let radiographPublishedSongs = [];
+let radiographPublishedRequest = null;
+let radiographPublishedLoaded = false;
+let radiographPublishedError = false;
 let radiographStreamUrl = "";
 let radiographStatusUrl = "";
 let radiographRecipeUrl = "";
@@ -529,8 +585,167 @@ function formatRadioTimeRemaining(now) {
     return `${minutes}:${seconds} remaining`;
 }
 
+function getRadiographTrackFile(track) {
+    return typeof track === "string" ? track : track?.file;
+}
+
+function renderRadiographPublishedSongs() {
+    const isSignedIn = Boolean(currentSupabaseUser?.id);
+    const songs = radiographPublishedSongs;
+    let message = "";
+    if (!isSignedIn) {
+        message = "Sign in to see your published songs.";
+    } else if (radiographPublishedError) {
+        message = "Published songs could not be refreshed. Retrying shortly.";
+    } else if (!radiographPublishedLoaded) {
+        message = "Loading your published songs…";
+    } else if (!songs.length) {
+        message = "Songs you submit to the station will appear here.";
+    }
+    if (radiographPublishedStatus.textContent !== message) {
+        radiographPublishedStatus.textContent = message;
+    }
+
+    const station = radiographLatestStationStatus;
+    const now = station?.now_playing;
+    const upcoming = Array.isArray(station?.upcoming) ? station.upcoming : [];
+    const filePositions = new Map();
+    const submissionPositions = new Map();
+    upcoming.forEach((track, index) => {
+        const file = getRadiographTrackFile(track);
+        const id = String(track?.submission_id ?? "");
+        if (!id && file && !filePositions.has(file)) filePositions.set(file, index + 1);
+        if (id && !submissionPositions.has(id)) submissionPositions.set(id, index + 1);
+    });
+    const rotation = Array.isArray(station?.tracks) ? station.tracks : [];
+    const rotationFiles = new Set(rotation.filter(track => !track?.submission_id).map(getRadiographTrackFile));
+    const rotationSubmissions = new Set(rotation.map(track => String(track?.submission_id ?? "")));
+    const rows = songs.map(song => {
+        const id = String(song.id);
+        const renderedTracks = song.earb_radio_tracks || [];
+        const files = renderedTracks.map(track => track.artifact_file).filter(Boolean);
+        const isPlaying = now?.title && (now.submission_id
+            ? String(now.submission_id) === id
+            : files.includes(now.title));
+        const position = Math.min(
+            submissionPositions.get(id) ?? Infinity,
+            ...files.map(file => filePositions.get(file) ?? Infinity)
+        );
+        const inRotation = rotationSubmissions.has(id) || files.some(file => rotationFiles.has(file));
+        let status;
+        if (isPlaying) {
+            status = "On air now";
+        } else if (Number.isFinite(position)) {
+            status = position === 1 ? "Next up" : "In station queue";
+        } else if (inRotation) {
+            status = "In rotation · position unavailable";
+        } else if (files.length) {
+            status = Array.isArray(station?.upcoming)
+                ? "Outside current rotation"
+                : "Queue position unavailable";
+        } else {
+            status = ({
+                submitted: "Submitted",
+                validated: "Awaiting approval",
+                approved: "Approved",
+                rejected: "Rejected",
+                render_queued: "Queued for rendering",
+                rendering: "Rendering",
+                render_done: "Rendered",
+                publish_ready: "Ready to publish",
+                published: "Published · position unavailable",
+                failed: "Failed"
+            })[song.status] || "Submitted";
+        }
+        const row = document.createElement("li");
+        row.className = "radiograph-queue-item";
+        row.classList.toggle("is-active", Boolean(isPlaying));
+        const rank = document.createElement("span");
+        rank.className = "radiograph-queue-index";
+        if (!isPlaying && Number.isFinite(position)) {
+            rank.textContent = `#${position}`;
+            rank.setAttribute("aria-label", `Queue position ${position}`);
+        }
+        const details = document.createElement("span");
+        const title = document.createElement("span");
+        title.className = "radiograph-queue-title";
+        title.textContent = song.title;
+        const meta = document.createElement("span");
+        meta.className = "radiograph-queue-meta";
+        meta.textContent = status;
+        details.append(title, meta);
+        const tags = getArrangementTags(song.earb_user_midis);
+        if (tags.length) {
+            const tagList = document.createElement("span");
+            tagList.className = "radiograph-queue-meta";
+            tagList.textContent = tags.join(" · ");
+            details.appendChild(tagList);
+        }
+        const scheduledFile = isPlaying ? now.title : getRadiographTrackFile(upcoming[position - 1]);
+        const ratingTrack = renderedTracks.find(track => scheduledFile && track.artifact_file === scheduledFile)
+            || renderedTracks[0];
+        const score = Number(ratingTrack?.popularity_score);
+        if (ratingTrack?.popularity_score != null && Number.isFinite(score)) {
+            const rating = document.createElement("span");
+            rating.className = "radiograph-queue-meta";
+            rating.textContent = score > 0
+                ? `Listener rating ${(score / 20).toFixed(1)} / 5`
+                : "No listener ratings yet";
+            details.appendChild(rating);
+        }
+        row.append(rank, details);
+        return row;
+    });
+    radiographPublishedList.replaceChildren(...rows);
+}
+
+function refreshRadiographPublishedSongs() {
+    const userId = currentSupabaseUser?.id;
+    const isVisible = radiographPublishedList.closest("[data-page-view]")?.classList.contains("is-active");
+    const mode = radiographMode;
+    if (!isVisible || !supabaseClient || !userId || !mode || radiographPublishedRequest) return;
+
+    const request = {};
+    radiographPublishedRequest = request;
+    (async () => {
+        const songs = [];
+        const pageSize = 200;
+        let beforeId = null;
+        while (true) {
+            let query = supabaseClient
+                .from("earb_radio_submissions")
+                .select("id,title,status,earb_user_midis(tags:midi_meta->tags,category:midi_meta->>category),earb_radio_tracks(artifact_file,popularity_score)")
+                .eq("user_id", userId)
+                .order("id", { ascending: false })
+                .order("id", { ascending: false, referencedTable: "earb_radio_tracks" })
+                .limit(pageSize);
+            if (beforeId !== null) query = query.lt("id", beforeId);
+            const { data, error } = await query;
+            if (radiographPublishedRequest !== request) return;
+            if (error) throw error;
+            songs.push(...data);
+            if (data.length < pageSize) break;
+            beforeId = data.at(-1).id;
+        }
+        radiographPublishedSongs = songs.filter(song => isArrangementEligibleForMode(song.earb_user_midis, mode));
+        radiographPublishedLoaded = true;
+        radiographPublishedError = false;
+    })().catch((error) => {
+        if (radiographPublishedRequest !== request) return;
+        console.warn("RadioGraph published songs refresh failed:", error);
+        radiographPublishedError = true;
+    }).finally(() => {
+        if (radiographPublishedRequest === request) {
+            radiographPublishedRequest = null;
+            renderRadiographPublishedSongs();
+        }
+    });
+}
+
 function renderRadiographQueue(status) {
-    const tracks = Array.isArray(status?.tracks) ? status.tracks : [];
+    const tracks = Array.isArray(status?.upcoming)
+        ? status.upcoming.slice(0, 7)
+        : Array.isArray(status?.tracks) ? status.tracks : [];
     const now = status?.now_playing || {};
     const currentFile = now.title || "";
     if (radiographQueueCount) {
@@ -554,15 +769,17 @@ function renderRadiographQueue(status) {
         return;
     }
     tracks.forEach((track, index) => {
-        const file = typeof track === "string" ? track : track?.file;
+        const file = getRadiographTrackFile(track);
         const title = typeof track === "string" ? formatRadioTrackName(track) : (track?.title || formatRadioTrackName(file));
-        const isCurrent = file === currentFile;
+        const hasUpcoming = Array.isArray(status.upcoming);
+        const isCurrent = !hasUpcoming && file === currentFile;
+        const isNext = hasUpcoming ? index === 0 : file === now.next_up;
         const row = document.createElement("div");
         row.className = "radiograph-queue-item";
         row.classList.toggle("is-active", isCurrent);
         const meta = isCurrent
             ? `Playing now - ${formatRadioTimeRemaining(now)}`
-            : (file === now.next_up ? "Next up" : "In rotation");
+            : (isNext ? "Next up" : "In rotation");
         row.innerHTML = `
             <span class="radiograph-queue-index">${String(index + 1).padStart(2, "0")}</span>
             <span>
@@ -577,6 +794,7 @@ function renderRadiographQueue(status) {
 }
 
 function renderRadiographStationStatus(status) {
+    radiographLatestStationStatus = status;
     const now = status?.now_playing || {};
     const currentFile = now.title || "";
     setRadiographListenerCount(status?.listener_count);
@@ -596,10 +814,13 @@ function renderRadiographStationStatus(status) {
         updateRadiographCommentControls();
     }
     if (radiographNowTitle) {
-        radiographNowTitle.textContent = currentFile ? formatRadioTrackName(currentFile) : "Waiting for station status";
+        radiographNowTitle.textContent = currentFile
+            ? now.track_title || currentTrack?.title || formatRadioTrackName(currentFile)
+            : "Waiting for station status";
     }
     if (radiographNowMeta) {
-        const next = now.next_up ? `Next: ${formatRadioTrackName(now.next_up)}` : "Next track pending";
+        const nextTitle = status?.upcoming?.[0]?.title || formatRadioTrackName(now.next_up);
+        const next = now.next_up ? `Next: ${nextTitle}` : "Next track pending";
         const creator = currentRadiographCreatorName ? `By ${currentRadiographCreatorName} - ` : "";
         radiographNowMeta.textContent = currentFile
             ? `${creator}${formatRadioTimeRemaining(now)} - ${next}`
@@ -610,6 +831,7 @@ function renderRadiographStationStatus(status) {
         radiographRotationRank.textContent = index >= 0 ? `Rotation #${index + 1}` : "Rotation sync";
     }
     renderRadiographQueue(status);
+    renderRadiographPublishedSongs();
 }
 
 function updateRadiographRatingButtons() {
@@ -703,23 +925,112 @@ async function syncRadiographCurrentTrackRating(fileName = currentRadiographFile
     }
 }
 
-async function refreshRadiographStationStatus() {
-    if (!radiographStatusUrl) {
+function normalizeArrangementTags(value) {
+    const parts = Array.isArray(value) ? value : value.split(",");
+    const tags = new Map();
+    for (const part of parts) {
+        if (typeof part !== "string") continue;
+        const tag = part.trim().slice(0, 40);
+        const key = tag.toLowerCase();
+        if (tag && !tags.has(key)) tags.set(key, tag);
+        if (tags.size === 10) break;
+    }
+    return [...tags.values()];
+}
+
+function getArrangementTags(record) {
+    const meta = record?.midi_meta || record;
+    if (!meta) return [];
+    return normalizeArrangementTags(Array.isArray(meta.tags) ? meta.tags : [meta.category]);
+}
+
+function getRadioTagFilters(mode) {
+    return {
+        included: mode?.include_tags ?? (mode?.required_tag ? [mode.required_tag] : []),
+        excluded: mode?.exclude_tags ?? []
+    };
+}
+
+function radioFilterKey(mode) {
+    return mode && JSON.stringify([mode.id, getRadioTagFilters(mode)]);
+}
+
+function describeRadioTagFilters(mode) {
+    const { included, excluded } = getRadioTagFilters(mode);
+    if (included.length === 1 && !excluded.length) {
+        return `playing arrangements tagged “${included[0]}”`;
+    }
+    return [
+        included.length ? `includes ${included.join(", ")}` : "",
+        excluded.length ? `excludes ${excluded.join(", ")}` : ""
+    ].filter(Boolean).join(" · ");
+}
+
+function isArrangementEligibleForMode(record, mode) {
+    if (!mode) return false;
+    const { included, excluded } = getRadioTagFilters(mode);
+    const tags = new Set(getArrangementTags(record).map(tag => tag.toLowerCase()));
+    return (!included.length || included.some(tag => tags.has(tag.toLowerCase())))
+        && !excluded.some(tag => tags.has(tag.toLowerCase()));
+}
+
+async function refreshRadiographMode() {
+    if (!supabaseClient) {
+        radiographModeStatus.textContent = "Broadcast mode unavailable in this preview.";
         return;
     }
-    try {
+    const { data: mode, error } = await supabaseClient
+        .from("earb_radio_current_mode")
+        .select("*")
+        .maybeSingle();
+    if (error || !mode) {
+        if (!radiographMode) radiographModeStatus.textContent = "Broadcast mode unavailable.";
+        return;
+    }
+    const previousMode = radiographMode;
+    radiographMode = mode;
+    radiographModeStatus.textContent = `${mode.label} · ${describeRadioTagFilters(mode) || "all broadcasts"}`;
+    if (radioFilterKey(previousMode) === radioFilterKey(mode)) return;
+
+    radiographBroadcast = null;
+    radiographPublishedRequest = null;
+    radiographPublishedSongs = [];
+    radiographPublishedLoaded = false;
+    radiographPublishedError = false;
+    if (arrangementsForBroadcast) hideArrangementsModal();
+    updateRadiographBroadcastPanel();
+    renderRadiographStationStatus({ tracks: [], upcoming: [] });
+    radiographLeaderboardRows = { all_time: [], week: [] };
+    renderRadiographLeaderboard();
+    refreshRadiographLeaderboard();
+}
+
+function refreshRadiographStationStatus() {
+    if (radiographStationRequest) return;
+
+    refreshRecomposerNews();
+    radiographStationRequest = (async () => {
+        await refreshRadiographMode();
+        refreshRadiographPublishedSongs();
+        if (!radiographStatusUrl) return;
         const response = await fetch(radiographStatusUrl, { cache: "no-store" });
         const status = await response.json();
         if (!response.ok || !status?.ok) {
             throw new Error(status?.error || `Station status failed (${response.status}).`);
         }
-        renderRadiographStationStatus(status);
-    } catch (error) {
-        console.warn("RadioGraph station status failed:", error);
-        if (radiographQueueCount) {
-            radiographQueueCount.textContent = "offline";
+        const modeId = status.mode_id || "everything";
+        if (modeId === (radiographMode?.id || "everything") &&
+            (!status.include_tags || radioFilterKey({ ...status, id: modeId }) === radioFilterKey(radiographMode))) {
+            renderRadiographStationStatus(status);
         }
-    }
+    })().catch((error) => {
+        console.warn("RadioGraph station status failed:", error);
+        radiographLatestStationStatus = null;
+        radiographQueueCount.textContent = "offline";
+        renderRadiographPublishedSongs();
+    }).finally(() => {
+        radiographStationRequest = null;
+    });
 }
 
 function startRadiographStatusPolling() {
@@ -734,9 +1045,6 @@ function startRadiographStatusPolling() {
     const derivedRecipe = /\/submit(?:\?.*)?$/.test(submitUrl) ? submitUrl.replace(/\/submit(?:\?.*)?$/, "/recipe") : "";
     radiographStatusUrl = configured || derived;
     radiographRecipeUrl = configuredRecipe || derivedRecipe;
-    if (!radiographStatusUrl) {
-        return;
-    }
     refreshRadiographStationStatus();
     radiographStatusTimer = setInterval(refreshRadiographStationStatus, 15000);
 }
@@ -792,7 +1100,8 @@ function renderRadiographLeaderboard() {
 }
 
 async function refreshRadiographLeaderboard() {
-    if (!supabaseClient) {
+    const filterKey = radioFilterKey(radiographMode);
+    if (!supabaseClient || !filterKey) {
         renderRadiographLeaderboard();
         return;
     }
@@ -801,6 +1110,7 @@ async function refreshRadiographLeaderboard() {
         if (error) {
             throw error;
         }
+        if (radioFilterKey(radiographMode) !== filterKey) return;
         const rows = Array.isArray(data) ? data : [];
         radiographLeaderboardRows = {
             all_time: rows.filter(row => row.period === "all_time"),
@@ -883,34 +1193,19 @@ function setupRadiographStream() {
     return false;
 }
 
-function updateRadiographDraftSummary() {
-    const draft = buildMidiSettingsDraft();
-    radiographDraftReady = Boolean(draft && baseMidiBuffer);
-    if (radiographDraftSummary) {
-        if (radiographDraftReady) {
-            const midiName = draft.midi?.name || "Current MIDI";
-            const tuning = draft.tuning?.id || "12-TET";
-            const mode = draft.mode || "Ionian";
-            const bpm = draft.tempo?.bpm ? `${Math.round(draft.tempo.bpm)} BPM` : "current tempo";
-            radiographDraftSummary.textContent = `${midiName} - ${mode} - ${tuning} - ${bpm} - ${draft.gm_program_overrides.length} GM channel overrides`;
-        } else {
-            radiographDraftSummary.textContent = "Load a MIDI in Recomposer to prepare a submission.";
-        }
-    }
-    if (radiographSubmitButton) {
-        radiographSubmitButton.disabled = !radiographDraftReady || !currentSupabaseUser?.id;
-    }
-    if (radiographSubmitStatus) {
-        if (!radiographDraftReady) {
-            radiographSubmitStatus.textContent = "Load a MIDI before submitting to the station queue.";
-            radiographSubmitStatus.classList.remove("error");
-        } else if (!currentSupabaseUser?.id) {
-            radiographSubmitStatus.textContent = "Sign in before submitting to the station queue.";
-            radiographSubmitStatus.classList.remove("error");
-        } else {
-            radiographSubmitStatus.textContent = "Recipe is ready for the submission API.";
-            radiographSubmitStatus.classList.remove("error");
-        }
+function updateRadiographBroadcastPanel({ preserveSubmitStatus = false } = {}) {
+    const isLoaded = Boolean(radiographBroadcast);
+    radiographBroadcastArrangement.hidden = !isLoaded;
+    radiographBroadcastArrangement.textContent = radiographBroadcast?.title || "";
+    radiographLoadArrangementButton.disabled = radiographSubmitting || isLoaded || !radiographMode;
+    radiographSubmitButton.disabled = radiographSubmitting || !isLoaded || !currentSupabaseUser?.id;
+    if (!radiographSubmitting && !preserveSubmitStatus) {
+        radiographSubmitStatus.textContent = !currentSupabaseUser?.id
+            ? "Sign in to load a saved arrangement for broadcast."
+            : isLoaded
+                ? "Ready to submit this arrangement to the station."
+                : "Save your arrangement under a new name in Recomposer before loading it here.";
+        radiographSubmitStatus.classList.remove("error");
     }
 }
 
@@ -959,87 +1254,189 @@ function scheduleRadiographRecovery(reason) {
     }, 2500);
 }
 
-async function submitRadiographDraft() {
-    if (pendingArrangementRefresh) {
-        clearTimeout(pendingArrangementRefresh);
-        pendingArrangementRefresh = null;
-        await rebuildTransformedPlayback("Arrangement updated.");
+async function loadArrangementForBroadcast(id, userId, mode) {
+    const { data: record, error } = await supabaseClient
+        .from("earb_user_midis")
+        .select("id,name,midi_payload,midi_meta,earb_radio_submissions(id)")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .single();
+    if (error) throw error;
+    const title = record?.name?.trim();
+    if (!title || record.midi_meta?.saved_from === "radiograph") {
+        throw new Error("Save this arrangement under a new name in Recomposer first.");
     }
-    const draft = buildMidiSettingsDraft();
-    if (!draft || !baseMidiBuffer || !currentSong) {
-        updateRadiographDraftSummary();
-        throw new Error("Load a MIDI before submitting to RadioGraph.");
+    if (!isArrangementEligibleForMode(record, mode)) {
+        throw new Error(`This arrangement’s tags don’t match the rules for ${mode.label}.`);
     }
-    if (!supabaseClient || !currentSupabaseUser?.id) {
-        showAuthModal();
-        throw new Error("Sign in before submitting to RadioGraph.");
+    if (record.earb_radio_submissions?.length) {
+        throw new Error("This arrangement was already submitted. Its tags determine which shows play it.");
     }
-    const title = draft.midi?.name || currentSong.displayName || currentSong.name || "RadioGraph submission";
-    const creatorName = getRadiographCreatorName();
-    const source = currentMidiSource || {
-        source_type: "upload",
-        file_name: buildArrangementFileName(title)
+
+    const source = record.midi_payload;
+    let buffer;
+    if (source?.encoding === "base64" && source.midi_base64) {
+        buffer = base64ToArrayBuffer(source.midi_base64);
+    } else if (source?.source_type === "sample" && source.source_url) {
+        const response = await fetch(source.source_url);
+        if (!response.ok) throw new Error("The saved MIDI could not be loaded.");
+        buffer = await response.arrayBuffer();
+    } else {
+        throw new Error("This arrangement does not contain saved MIDI data.");
+    }
+
+    const meta = { ...record.midi_meta };
+    let recipe = meta.broadcast_recipe;
+    delete meta.broadcast_recipe;
+    delete meta.category;
+    delete meta.tags;
+    if (!recipe) {
+        const settings = meta.arrangement_settings || {};
+        const parsed = await parseMidiBuffer(buffer);
+        const tuningId = resolveSavedTuningId(settings.tuning_id || DEFAULT_TUNING_ID);
+        const tuning = tuningId === DEFAULT_TUNING_ID
+            ? { id: DEFAULT_TUNING_ID, table: equalTemperamentTable }
+            : await fetchScalaTuning(tuningId);
+        const mode = MODE_ADJUSTMENTS[settings.mode] ? settings.mode : DEFAULT_MODE;
+        const transpose = clampTransposeValue(Number(settings.transpose_semitones ?? 0));
+        const trackOverrides = Array.isArray(settings.track_overrides) ? settings.track_overrides : [];
+        const programOverrides = trackOverrides.map(({ channel, bank_msb, program }) => ({
+            channel, bank_msb, bank_lsb: 0, program
+        }));
+        const tempoPercent = clampTempoPercent(Number(settings.tempo_percent ?? 100));
+        const bpm = clampTempoBpm(detectDefaultTempo(parsed) * tempoPercent / 100);
+        recipe = createMidiSettingsDraft({
+            name: title, byteLength: buffer.byteLength, mode, transpose, bpm, programOverrides, trackOverrides,
+            tuning: buildRadioTuningRecipe(tuning, mode, transpose, settings.scala_preference || "lite")
+        });
+    }
+
+    let keyframes = readSavedKeyframes(recipe.keyframes);
+    if (keyframes.length < 2) {
+        const previousKeyframes = readSavedKeyframes(meta.arrangement_keyframes);
+        if (previousKeyframes.length > 1) {
+            const parsed = await parseMidiBuffer(buffer);
+            keyframes = buildRadioKeyframes(previousKeyframes, detectDefaultTempo(parsed));
+        }
+    }
+    const hasKeyframes = keyframes.length > 1;
+    const usesEmbeddedVoices = ["xg", "gm2"].includes(recipe.midi_voice_bank_mode);
+    if (hasKeyframes) {
+        const midi = new Midi(buffer);
+        midi.tracks = midi.tracks.filter(track => track.notes.length > 0);
+        const initialTracks = new Map(keyframes[0].settings.track_overrides.map(track => [track.track_index, track]));
+        midi.tracks.forEach((track, index) => {
+            stripProgramAndBankEvents(track);
+            track.channel = initialTracks.get(index)?.channel ?? track.channel;
+        });
+        buffer = encodeMidiVoices(midi.toArray());
+        recipe = {
+            ...recipe,
+            midi: { ...recipe.midi, duration_ticks: midi.durationTicks },
+            keyframes,
+            midi_voice_bank_mode: "xg"
+        };
+        delete meta.arrangement_keyframes;
+    } else if (usesEmbeddedVoices) {
+        const midi = new Midi(buffer);
+        midi.tracks = midi.tracks.filter(track => track.notes.length > 0);
+        const overrides = new Map(recipe.track_overrides.map(override => [override.track_index, override]));
+        const banks = midi.tracks.map((track, index) => {
+            const override = overrides.get(index);
+            if (!override) return getDefaultTrackBank({ index });
+            track.channel = override.channel;
+            track.instrument.number = override.program;
+            delete track.controlChanges[0];
+            delete track.controlChanges[32];
+            return override.bank_msb;
+        });
+        buffer = encodeMidiVoices(midi.toArray(), banks);
+        recipe = { ...recipe, midi_voice_bank_mode: "xg" };
+    }
+
+    return {
+        id: record.id,
+        modeId: mode.id,
+        filterKey: radioFilterKey(mode),
+        title,
+        tags: getArrangementTags(record),
+        recipe: { ...recipe, midi: { ...recipe.midi, name: title, byte_length: buffer.byteLength } },
+        payload: source.encoding === "base64" && !hasKeyframes && !usesEmbeddedVoices ? source : buildMidiPayload({
+            source_type: "upload", file_name: buildArrangementFileName(title)
+        }, buffer),
+        meta
     };
-    const midiToSubmit = arrangementDirty && transformedMidiBuffer
-        ? transformedMidiBuffer
-        : baseMidiBuffer;
-    const payload = buildMidiPayload(
-        { source_type: "upload", file_name: buildArrangementFileName(title) },
-        midiToSubmit
-    );
+}
+
+async function submitRadiographArrangement(arrangement, userId) {
+    const { id, title, payload, recipe } = arrangement;
+    const creatorName = getRadiographCreatorName();
     const meta = {
-        ...buildMidiMeta(currentSong, title),
+        ...arrangement.meta,
         submitted_from: "radiograph",
         creator_name: creatorName,
-        creator_user_id: currentSupabaseUser.id,
-        original_source: source,
-        arrangement_settings: buildArrangementSettingsSnapshot()
+        creator_user_id: userId
     };
     const { data, error } = await supabaseClient
         .from("earb_radio_submissions")
         .insert({
-            user_id: currentSupabaseUser.id,
+            user_id: userId,
+            source_user_midi_id: id,
+            mode_id: arrangement.modeId,
             title,
             creator_name: creatorName,
             status: "submitted",
-            recipe: draft,
+            recipe,
             midi_payload: payload,
             midi_meta: meta
         })
-        .select("id,status,submitted_at")
+        .select("id,title,status")
         .single();
     if (error) {
+        if (error.code === "23505") {
+            if (radiographBroadcast === arrangement) radiographBroadcast = null;
+            throw new Error("This arrangement was already submitted. Its tags determine which shows play it.");
+        }
         throw error;
     }
-    const renderResult = await renderRadiographSubmissionOnDroplet({
-        title,
-        recipe: draft,
-        midi_payload: payload,
-        midi_meta: meta,
-        submission_id: data?.id || null,
-        creator_name: creatorName,
-        creator_user_id: currentSupabaseUser.id
-    });
-    if (renderResult?.track_file) {
+    if (currentSupabaseUser?.id === userId && radioFilterKey(radiographMode) === arrangement.filterKey) {
+        radiographBroadcast = null;
+        radiographPublishedRequest = null;
+        radiographPublishedSongs = [
+            { ...data, earb_user_midis: { tags: arrangement.tags } },
+            ...radiographPublishedSongs.filter(song => song.id !== data.id)
+        ];
+        renderRadiographPublishedSongs();
+        radiographSubmitStatus.textContent = `“${title}” submitted. Track it in Published Songs.`;
+    }
+    let renderResult;
+    try {
+        renderResult = await renderRadiographSubmissionOnDroplet(data.id);
+    } catch (error) {
+        throw new Error(`“${title}” was submitted, but rendering failed. ${error.message}`);
+    }
+    if (renderResult?.track_file && currentSupabaseUser?.id === userId) {
         await registerRenderedRadiographTrack(data, renderResult, title);
     }
-    return {
-        submission: data,
-        render: renderResult
-    };
+    return { submission: data, render: renderResult };
 }
 
-async function renderRadiographSubmissionOnDroplet(payload) {
+async function renderRadiographSubmissionOnDroplet(submissionId) {
     const submitUrl = typeof APP_CONFIG.radioSubmitUrl === "string" ? APP_CONFIG.radioSubmitUrl.trim() : "";
     if (!submitUrl) {
         return null;
     }
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    const accessToken = data.session?.access_token;
+    if (!accessToken) throw new Error("Sign in again before rendering this submission.");
     const response = await fetch(submitUrl, {
         method: "POST",
         headers: {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ submission_id: submissionId })
     });
     const result = await response.json().catch(() => null);
     if (!response.ok || !result?.ok) {
@@ -1438,6 +1835,7 @@ function renderLibrarianLibrary() {
     if (!librarianLibraryList) {
         return;
     }
+    librarianEditTags.disabled = !currentSupabaseUser?.id || !getActiveLibrarianItem()?.recordId;
     librarianLibraryList.innerHTML = "";
     const visibleItems = librarianItems.filter((item) => {
         return activeLibrarianFilter === "all" || item.source === activeLibrarianFilter;
@@ -1467,6 +1865,52 @@ function renderLibrarianLibrary() {
         librarianLibraryList.appendChild(button);
     });
 }
+
+librarianEditTags.addEventListener("click", () => {
+    const item = getActiveLibrarianItem();
+    if (!item?.recordId || !currentSupabaseUser?.id) return;
+    librarianTagsDialog.dataset.itemId = item.id;
+    librarianTagsInput.value = getArrangementTags(item.record).join(", ");
+    librarianTagsStatus.textContent = `Tags for “${item.title}”. Separate tags with commas.`;
+    librarianTagsDialog.showModal();
+});
+
+document.getElementById("librarian-tags-cancel").addEventListener("click", () => {
+    librarianTagsDialog.close();
+});
+librarianTagsDialog.querySelector("form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const item = librarianItems.find(row => row.id === librarianTagsDialog.dataset.itemId);
+    const userId = currentSupabaseUser?.id;
+    if (!item?.recordId || !userId || librarianTagsSave.disabled) return;
+    const tags = normalizeArrangementTags(librarianTagsInput.value);
+    librarianTagsSave.disabled = true;
+    try {
+        const { data, error } = await supabaseClient.rpc("earb_set_arrangement_tags", {
+            arrangement_id: item.recordId,
+            new_tags: tags
+        });
+        if (error) throw error;
+        if (!data) throw new Error("The saved arrangement is no longer available.");
+        if (currentSupabaseUser?.id !== userId) return;
+        const index = librarianItems.findIndex(row => row.id === item.id);
+        if (index >= 0) {
+            const record = librarianItems[index].record;
+            const updated = { ...record, midi_meta: { ...record.midi_meta, tags } };
+            librarianItems[index] = buildLibrarianItemFromRecord(updated, index, item.source);
+        }
+        if (activeLoadedLibrarianItemId === item.id && currentMidiSource) currentMidiSource.tags = tags;
+        setActiveLibrarianItem(activeLibrarianItemId, { queue: false });
+        setLibrarianStatus(tags.length ? `Tags saved for ${item.title}.` : `Tags cleared for ${item.title}.`);
+        librarianTagsDialog.close();
+    } catch (error) {
+        if (currentSupabaseUser?.id === userId) {
+            librarianTagsStatus.textContent = error?.message || "Could not save these tags.";
+        }
+    } finally {
+        librarianTagsSave.disabled = false;
+    }
+});
 
 function renderLibrarianQueue() {
     if (!librarianQueue) {
@@ -1589,6 +2033,7 @@ function buildLibrarianItemFromRecord(record, index = 0, source = "saved") {
         creatorName ? `by ${creatorName}` : "",
         duration,
         trackCount ? `${trackCount} track${trackCount === 1 ? "" : "s"}` : "",
+        getArrangementTags(meta).join(", "),
         meta.arrangement_settings ? "arranged MIDI" : "MIDI"
     ].filter(Boolean);
     return {
@@ -2173,52 +2618,38 @@ if (radiographAudio) {
     });
 }
 
-if (radiographUseCurrentButton) {
-    radiographUseCurrentButton.addEventListener("click", () => {
-        updateRadiographDraftSummary();
-        if (!radiographDraftReady) {
-            setActivePage("recomposer");
-            setStatus("Load a MIDI before preparing a RadioGraph submission.", true);
-        }
-    });
-}
+radiographLoadArrangementButton.addEventListener("click", () => {
+    openArrangementsModal({ forBroadcast: true });
+});
 
-if (radiographSubmitButton) {
-    radiographSubmitButton.addEventListener("click", async () => {
-        updateRadiographDraftSummary();
-        if (!radiographDraftReady) {
-            return;
+radiographSubmitButton.addEventListener("click", async () => {
+    const arrangement = radiographBroadcast;
+    const userId = currentSupabaseUser?.id;
+    if (radiographSubmitting || !arrangement || !userId) return;
+
+    radiographSubmitting = true;
+    updateRadiographBroadcastPanel();
+    radiographSubmitStatus.textContent = `Submitting “${arrangement.title}”…`;
+    radiographSubmitStatus.classList.remove("error");
+    try {
+        const result = await submitRadiographArrangement(arrangement, userId);
+        if (currentSupabaseUser?.id === userId && radioFilterKey(radiographMode) === arrangement.filterKey) {
+            radiographSubmitStatus.textContent = result.render?.track_file
+                ? `“${arrangement.title}” is ready. Follow its position in Published Songs.`
+                : `“${arrangement.title}” submitted. Track it in Published Songs.`;
         }
-        if (!currentSupabaseUser?.id) {
-            showAuthModal();
-            return;
+    } catch (error) {
+        console.warn("RadioGraph submission failed:", error);
+        if (currentSupabaseUser?.id === userId && radioFilterKey(radiographMode) === arrangement.filterKey) {
+            radiographSubmitStatus.textContent = error?.message || "RadioGraph submission failed.";
+            radiographSubmitStatus.classList.add("error");
         }
-        radiographSubmitButton.disabled = true;
-        if (radiographSubmitStatus) {
-            radiographSubmitStatus.textContent = "Submitting recipe to RadioGraph queue...";
-            radiographSubmitStatus.classList.remove("error");
-        }
-        try {
-            const result = await submitRadiographDraft();
-            if (radiographSubmitStatus) {
-                const submissionId = result?.submission?.id;
-                const trackFile = result?.render?.track_file;
-                radiographSubmitStatus.textContent = trackFile
-                    ? `Submission #${submissionId} rendered to radio playlist: ${trackFile}`
-                    : `Submission #${submissionId} queued for moderation.`;
-                radiographSubmitStatus.classList.remove("error");
-            }
-        } catch (error) {
-            console.warn("RadioGraph submission failed:", error);
-            if (radiographSubmitStatus) {
-                radiographSubmitStatus.textContent = error?.message || "RadioGraph submission failed.";
-                radiographSubmitStatus.classList.add("error");
-            }
-        } finally {
-            updateRadiographDraftSummary();
-        }
-    });
-}
+    } finally {
+        radiographSubmitting = false;
+        updateRadiographBroadcastPanel({ preserveSubmitStatus: currentSupabaseUser?.id === userId && radioFilterKey(radiographMode) === arrangement.filterKey });
+        refreshRadiographStationStatus();
+    }
+});
 
 if (radiographSaveLibraryButton) {
     radiographSaveLibraryButton.addEventListener("click", async () => {
@@ -2330,6 +2761,7 @@ radiographRatingButtons.forEach((button) => {
             radiographRatingStatus.textContent = `Your rating for this broadcast: ${nextRating}/5.`;
             radiographRatingStatus.classList.remove("error");
         }
+        refreshRadiographPublishedSongs();
         refreshRadiographLeaderboard();
     });
 });
@@ -2356,7 +2788,7 @@ const GM_PERCUSSION_BANK = 128;
 const GM_MELODIC_BANK = 0;
 const CLOUD_SAVE_TIMEOUT_MS = 15000;
 const DEFAULT_CONFIG = {
-    fluidsynthBaseUrl: "../assets/fluidsynth/",
+    fluidsynthBaseUrl: "assets/vendor/fluidsynth/",
     soundfontBaseUrl: "assets/soundfonts/",
     soundfontFallbacksEnabled: false,
     midiBaseUrl: "assets/midi/",
@@ -2558,8 +2990,172 @@ function setAuthStatus(message, isError = false) {
     }
 }
 
+async function syncStationOperator(userId) {
+    stationOperatorId = null;
+    stationControlTab.classList.add("is-hidden");
+    tabsAuthRow.classList.remove("has-station-control");
+    if (stationControlTab.classList.contains("is-active")) setActivePage("recomposer");
+    if (!supabaseClient || !userId) return;
+    try {
+        const { data, error } = await supabaseClient.rpc("earb_is_station_operator");
+        if (error) throw error;
+        if (currentSupabaseUser?.id === userId && data === true) {
+            stationOperatorId = userId;
+            stationControlTab.classList.remove("is-hidden");
+            tabsAuthRow.classList.add("has-station-control");
+        }
+    } catch (error) {
+        console.warn("Station operator access could not be checked:", error);
+    }
+}
+
+async function refreshRecomposerNews() {
+    if (!supabaseClient) return;
+    const request = ++recomposerNewsRequest;
+    try {
+        const { data, error } = await supabaseClient
+            .from("earb_recomposer_news")
+            .select("title,body")
+            .maybeSingle();
+        if (error) throw error;
+        if (request !== recomposerNewsRequest) return;
+        recomposerNewsHeading.textContent = data?.title || "";
+        recomposerNewsBody.textContent = data?.body || "";
+        recomposerNews.classList.toggle("is-hidden", !data);
+    } catch (error) {
+        console.warn("Recomposer news could not be loaded:", error);
+    }
+}
+
+function showStationModeFilters() {
+    const { included, excluded } = getRadioTagFilters(stationModes.get(stationModeSelect.value));
+    stationIncludeTags.value = included.join(", ");
+    stationExcludeTags.value = excluded.join(", ");
+}
+
+stationModeSelect.addEventListener("change", showStationModeFilters);
+
+async function loadStationControl() {
+    const userId = stationOperatorId;
+    if (!userId) return;
+    stationModeSelect.disabled = true;
+    stationIncludeTags.disabled = true;
+    stationExcludeTags.disabled = true;
+    stationModeSave.disabled = true;
+    stationNewsTitle.disabled = true;
+    stationNewsBody.disabled = true;
+    stationNewsPublish.disabled = true;
+    stationNewsRemove.disabled = true;
+    stationModeStatus.textContent = "Loading station settings…";
+    try {
+        const { data, error } = await supabaseClient.rpc("earb_station_control");
+        if (error) throw error;
+        if (stationOperatorId !== userId) return;
+        stationModes = new Map(data.modes.map(mode => [mode.id, mode]));
+        stationModeSelect.replaceChildren(...data.modes.map(mode => new Option(mode.label, mode.id)));
+        stationModeSelect.value = data.active_mode_id;
+        showStationModeFilters();
+        stationNewsTitle.value = data.news.title;
+        stationNewsBody.value = data.news.body;
+        stationModeSelect.disabled = false;
+        stationIncludeTags.disabled = false;
+        stationExcludeTags.disabled = false;
+        stationModeSave.disabled = false;
+        stationNewsTitle.disabled = false;
+        stationNewsBody.disabled = false;
+        stationNewsPublish.disabled = false;
+        stationNewsRemove.disabled = !data.news.published;
+        stationModeStatus.textContent = "";
+        stationNewsStatus.textContent = data.news.published ? "Published on Recomposer." : "";
+    } catch (error) {
+        if (stationOperatorId === userId) stationModeStatus.textContent = error?.message || "Could not load station settings.";
+    }
+}
+
+stationModeForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const userId = stationOperatorId;
+    if (!userId || stationModeSave.disabled) return;
+    const newMode = stationModeSelect.value;
+    const included = stationIncludeTags.value.split(",").map(tag => tag.trim()).filter(Boolean);
+    const excluded = stationExcludeTags.value.split(",").map(tag => tag.trim()).filter(Boolean);
+    stationModeSave.disabled = true;
+    stationModeSelect.disabled = true;
+    stationIncludeTags.disabled = true;
+    stationExcludeTags.disabled = true;
+    stationModeStatus.textContent = "Changing the active show…";
+    try {
+        const { data: show, error } = await supabaseClient.rpc("earb_station_save_mode_filters", {
+            new_mode: newMode, included, excluded
+        });
+        if (error) throw error;
+        if (stationOperatorId !== userId) return;
+        stationModes.set(show.id, show);
+        showStationModeFilters();
+        stationModeStatus.textContent = `${show.label} is active and starts with the next track.`;
+        await radiographStationRequest;
+        refreshRadiographStationStatus();
+    } catch (error) {
+        if (stationOperatorId === userId) stationModeStatus.textContent = error?.message || "Could not change the active show.";
+    } finally {
+        if (stationOperatorId === userId) {
+            stationModeSave.disabled = false;
+            stationModeSelect.disabled = false;
+            stationIncludeTags.disabled = false;
+            stationExcludeTags.disabled = false;
+        }
+    }
+});
+
+async function saveStationNews(publish) {
+    const userId = stationOperatorId;
+    if (!userId || stationNewsPublish.disabled) return;
+    const wasPublished = !stationNewsRemove.disabled;
+    stationNewsPublish.disabled = true;
+    stationNewsRemove.disabled = true;
+    let isPublished = wasPublished;
+    try {
+        const { data, error } = await supabaseClient.rpc("earb_station_set_news", {
+            news_title: stationNewsTitle.value,
+            news_body: stationNewsBody.value,
+            make_public: publish
+        });
+        if (error) throw error;
+        if (stationOperatorId !== userId) return;
+        isPublished = data;
+        stationNewsStatus.textContent = isPublished ? "Published on Recomposer." : "Removed from Recomposer.";
+        await refreshRecomposerNews();
+    } catch (error) {
+        if (stationOperatorId === userId) stationNewsStatus.textContent = error?.message || "Could not update the announcement.";
+    } finally {
+        if (stationOperatorId === userId) {
+            stationNewsPublish.disabled = false;
+            stationNewsRemove.disabled = !isPublished;
+        }
+    }
+}
+
+stationNewsForm.addEventListener("submit", event => {
+    event.preventDefault();
+    saveStationNews(true);
+});
+stationNewsRemove.addEventListener("click", () => saveStationNews(false));
+
 function updateAuthUiForUser(user) {
+    const previousUserId = currentSupabaseUser?.id;
     currentSupabaseUser = user || null;
+    if (previousUserId !== currentSupabaseUser?.id) {
+        syncStationOperator(currentSupabaseUser?.id);
+        librarianTagsDialog.close();
+        radiographBroadcast = null;
+        if (arrangementsForBroadcast) hideArrangementsModal();
+        radiographPublishedRequest = null;
+        radiographPublishedSongs = [];
+        radiographPublishedLoaded = false;
+        radiographPublishedError = false;
+        renderRadiographPublishedSongs();
+        refreshRadiographPublishedSongs();
+    }
     if (authSignOutButton) {
         authSignOutButton.disabled = !currentSupabaseUser;
     }
@@ -2572,7 +3168,7 @@ function updateAuthUiForUser(user) {
     if (!supabaseClient) {
         setAuthStatus("Cloud login is disabled. Add Supabase keys in config.json.", true);
         setSaveArrangementEnabled(false);
-        updateRadiographDraftSummary();
+        updateRadiographBroadcastPanel();
         syncRadiographCurrentTrackRating();
         updateLibrarianCommentControls();
         return;
@@ -2580,14 +3176,14 @@ function updateAuthUiForUser(user) {
     if (currentSupabaseUser?.email) {
         setAuthStatus(`Signed in as ${currentSupabaseUser.email}. Cloud settings sync is active.`, false);
         setSaveArrangementEnabled(true);
-        updateRadiographDraftSummary();
+        updateRadiographBroadcastPanel();
         syncRadiographCurrentTrackRating();
         updateLibrarianCommentControls();
         return;
     }
     setAuthStatus("Not signed in. Your cloud settings are currently unavailable.", false);
     setSaveArrangementEnabled(false);
-    updateRadiographDraftSummary();
+    updateRadiographBroadcastPanel();
     syncRadiographCurrentTrackRating();
     updateLibrarianCommentControls();
 }
@@ -2751,6 +3347,8 @@ function hideArrangementsModal() {
         return;
     }
     arrangementsModal.classList.add("is-hidden");
+    arrangementsPickerRequest = null;
+    arrangementsBusy = false;
 }
 
 function setSaveArrangementStatus(message, isError = false) {
@@ -2771,6 +3369,9 @@ function showSaveArrangementModal(defaultName = "") {
         saveArrangementNameInput.focus();
         saveArrangementNameInput.select();
     }
+    const folder = currentMidiSource?.folder;
+    const suggestedTag = folder?.split("/")[0]?.replace(/^\d+\s+/, "");
+    saveArrangementTagsInput.value = (currentMidiSource?.tags ?? (suggestedTag ? [suggestedTag] : [])).join(", ");
     setSaveArrangementStatus("Use an existing name to overwrite, or a new name to save separately.", false);
 }
 
@@ -2782,6 +3383,7 @@ function hideSaveArrangementModal() {
 }
 
 function selectSavedArrangement(recordId) {
+    if (arrangementsBusy) return;
     selectedArrangementId = recordId === null || recordId === undefined ? null : String(recordId);
     if (!arrangementsList) {
         return;
@@ -2802,15 +3404,19 @@ function renderSavedArrangements(records) {
     }
     arrangementsList.innerHTML = "";
     savedArrangementsCache = Array.isArray(records) ? records.slice() : [];
-    mergeSavedSongRecordsIntoLibrarian(savedArrangementsCache);
+    if (!arrangementsForBroadcast) mergeSavedSongRecordsIntoLibrarian(savedArrangementsCache);
     selectedArrangementId = null;
     if (!savedArrangementsCache.length) {
         const empty = document.createElement("div");
         empty.className = "arrangements-list__empty";
-        empty.textContent = "No stored arrangements yet";
+        empty.textContent = arrangementsForBroadcast ? "No arrangements available for broadcast" : "No stored arrangements yet";
         arrangementsList.appendChild(empty);
         arrangementsLoadButton.disabled = true;
-        setArrangementsStatus("There are no stored arrangements yet.", false);
+        setArrangementsStatus(arrangementsForBroadcast
+            ? describeRadioTagFilters(radiographMode)
+                ? "Save an arrangement whose tags match the active show’s rules."
+                : "Save an arrangement under a new name in Recomposer to submit it."
+            : "There are no stored arrangements yet.", false);
         return;
     }
     savedArrangementsCache.forEach((record, index) => {
@@ -2822,7 +3428,11 @@ function renderSavedArrangements(records) {
         const stamp = createdAt && !Number.isNaN(createdAt.getTime())
             ? createdAt.toLocaleString()
             : "Saved arrangement";
-        button.innerHTML = `${record.name || "Untitled arrangement"}<span class="arrangements-list__meta">${stamp}</span>`;
+        const meta = document.createElement("span");
+        meta.className = "arrangements-list__meta";
+        const tags = getArrangementTags(record).join(", ");
+        meta.textContent = tags ? `${tags} · ${stamp}` : stamp;
+        button.append(record.name || "Untitled arrangement", meta);
         button.setAttribute("role", "option");
         button.setAttribute("aria-selected", "false");
         button.addEventListener("click", () => {
@@ -2831,41 +3441,57 @@ function renderSavedArrangements(records) {
         arrangementsList.appendChild(button);
     });
     selectSavedArrangement(savedArrangementsCache[0]?.id ?? "0");
-    setArrangementsStatus("Choose a saved arrangement to load.", false);
+    setArrangementsStatus(arrangementsForBroadcast
+        ? "Choose a saved arrangement to load for broadcast."
+        : "Choose a saved arrangement to load.", false);
 }
 
-async function openArrangementsModal() {
+async function openArrangementsModal({ forBroadcast = false } = {}) {
     const user = await resolveCurrentSupabaseUser();
     if (!supabaseClient || !user?.id) {
-        setStatus("Sign in to load saved arrangements.", true);
+        if (!forBroadcast) setStatus("Sign in to load saved arrangements.", true);
         showAuthModal();
         return;
     }
-    if (arrangementsList) {
-        arrangementsList.innerHTML = "";
-    }
-    if (arrangementsLoadButton) {
-        arrangementsLoadButton.disabled = true;
-    }
-    setArrangementsStatus("Loading saved arrangements...", false);
+    const mode = radiographMode;
+    if (forBroadcast && (radiographSubmitting || radiographBroadcast || !mode)) return;
+
+    arrangementsForBroadcast = forBroadcast;
+    const request = {};
+    arrangementsPickerRequest = request;
+    arrangementsBusy = false;
+    document.getElementById("arrangements-modal-title").textContent =
+        forBroadcast ? "Load Arrangement for Broadcast" : "Load Arrangement";
+    arrangementsList.replaceChildren();
+    arrangementsLoadButton.disabled = true;
+    setArrangementsStatus("Loading saved arrangements…", false);
     showArrangementsModal();
-    const { data, error } = await withTimeout(
-        supabaseClient
-            .from("earb_user_midis")
-            .select("id,name,midi_payload,midi_meta,created_at")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false })
-            .limit(100),
-        CLOUD_SAVE_TIMEOUT_MS,
-        "Loading saved arrangements timed out. Refresh the page and try again."
-    );
-    if (error) {
+    try {
+        const { data, error } = await withTimeout(
+            supabaseClient
+                .from("earb_user_midis")
+                .select(forBroadcast
+                    ? "id,name,created_at,saved_from:midi_meta->>saved_from,tags:midi_meta->tags,category:midi_meta->>category,earb_radio_submissions(id)"
+                    : "id,name,midi_payload,midi_meta,created_at")
+                .eq("user_id", user.id)
+                .order("created_at", { ascending: false })
+                .limit(100),
+            CLOUD_SAVE_TIMEOUT_MS,
+            "Loading saved arrangements timed out. Refresh the page and try again."
+        );
+        if (arrangementsPickerRequest !== request) return;
+        if (error) throw error;
+        const records = Array.isArray(data) ? data : [];
+        renderSavedArrangements(forBroadcast
+            ? records.filter(record => record.name?.trim() && record.saved_from !== "radiograph"
+                && isArrangementEligibleForMode(record, mode)
+                && !record.earb_radio_submissions?.length)
+            : records);
+    } catch (error) {
+        if (arrangementsPickerRequest !== request) return;
         console.warn("Failed to load saved arrangements:", error);
-        renderSavedArrangements([]);
         setArrangementsStatus(error?.message || "Unable to load saved arrangements.", true);
-        return;
     }
-    renderSavedArrangements(Array.isArray(data) ? data : []);
 }
 
 function showFavoritesModal() {
@@ -3035,9 +3661,8 @@ async function applyArrangementSettingsSnapshot(snapshot, options = {}) {
         trackTransposes.clear();
         playableTracks.forEach((track) => {
             const slot = track.slot;
-            const channel = track.channelNumber ?? track.channel ?? trackChannels.get(slot) ?? 0;
-            trackPrograms.set(slot, clampProgram(track.program ?? 0));
-            trackBanks.set(slot, getDefaultBankForChannel(channel));
+            trackPrograms.set(slot, 0);
+            trackBanks.set(slot, getDefaultTrackBank(track));
             trackVolumes.set(slot, 1);
             trackTransposes.set(slot, 0);
         });
@@ -3067,6 +3692,7 @@ async function applyArrangementSettingsSnapshot(snapshot, options = {}) {
         renderInstrumentMenus();
         applyAllProgramOverrides();
         applyAllChannelVolumes();
+        if (activeKeyframe) Object.assign(activeKeyframe, captureKeyframe(activeKeyframe.position));
         scheduleArrangementRefresh(statusMessage);
         setStatus(statusMessage, false);
     } finally {
@@ -3089,6 +3715,10 @@ function resetFavoriteStateForNewSong() {
 
 function getDefaultBankForChannel(channel) {
     return channel === GM_PERCUSSION_CHANNEL ? GM_PERCUSSION_BANK : GM_MELODIC_BANK;
+}
+
+function getDefaultTrackBank(track) {
+    return (track.index ?? track.slot) === 9 ? GM_PERCUSSION_BANK : GM_MELODIC_BANK;
 }
 
 function getTrackBank(trackIndex, channel = trackChannels.get(trackIndex) ?? 0) {
@@ -3171,8 +3801,6 @@ let activeScalaSource = null;
 let scalaPreference = null;
 let currentMode = DEFAULT_MODE;
 let currentTranspose = 0;
-const pendingProgramUpdates = new Map();
-let programFlushHandle = null;
 let baseMidiBuffer = null;
 let transformedMidiBuffer = null;
 let arrangementDirty = false;
@@ -3186,11 +3814,15 @@ let recordingActive = false;
 let previousLoopState = false;
 let savedArrangementsCache = [];
 let selectedArrangementId = null;
+let arrangementsForBroadcast = false;
+let arrangementsPickerRequest = null;
+let arrangementsBusy = false;
 const trackVisualState = new Map();
 const METER_WINDOW_SECONDS = 0.35;
 const METER_DECAY = 0.78;
 const METER_ATTACK = 0.45;
 const sampleMidiMap = new Map();
+const includedMidiFolders = new Map();
 let openSampleModal = null;
 let sampleManifestLoaded = false;
 let supabaseClient = null;
@@ -3382,12 +4014,17 @@ function getSoundfontCandidates() {
 fluidRenderer = new FluidSynthRenderer({
     moduleUrl: FLUID_MODULE_URL,
     resolvePath: resolveFluidPath,
-    workletUrl: "js/fluid-worklet.js",
+    workletUrl: "js/fluid-worklet.js?v=2",
     getSoundfontCandidates,
     defaultTempoBpm: DEFAULT_TEMPO_BPM
 });
 window.__fluidRenderer = fluidRenderer;
 fluidRenderer.setProgressCallback(setStatusProgress);
+function followPlaybackKeyframes(seconds, untilNextBlock) {
+    if (isUserScrubbing || !fluidRenderer.songDuration) return;
+    const frame = keyframeAt((seconds + untilNextBlock) / fluidRenderer.songDuration);
+    if (frame && frame.position > activeKeyframe.position) applyKeyframe(frame);
+}
 fluidRenderer.onPlaybackComplete = async () => {
     if (recordingActive) {
         await stopRecordingSession(true);
@@ -3402,24 +4039,15 @@ fluidRenderer.onPlaybackComplete = async () => {
         stopProgressUpdates(true);
         applyTempoChange();
         fluidRenderer.reapplyTuning();
-        applyAllProgramOverrides();
         setStatus("Looping in 3s...", false);
-        setTimeout(async () => {
+        loopRestartTimer = setTimeout(async () => {
+            loopRestartTimer = null;
             if (!loopToggle.checked || !currentSong) {
                 return;
             }
+            applyAllProgramOverrides();
             const scheduled = await scheduleNotesFromOffset(0);
             if (scheduled) {
-                applyAllProgramOverrides();
-                if (typeof fluidRenderer.scheduleProgramRefresh === "function") {
-                    fluidRenderer.scheduleProgramRefresh();
-                }
-                setTimeout(() => {
-                    applyAllProgramOverrides();
-                    if (typeof fluidRenderer.scheduleProgramRefresh === "function") {
-                        fluidRenderer.scheduleProgramRefresh();
-                    }
-                }, 50);
                 isPlaying = true;
                 startProgressUpdates();
                 setStatus("Playing...", false);
@@ -3710,29 +4338,48 @@ if (arrangementsCancelButton) {
 }
 if (arrangementsLoadButton) {
     arrangementsLoadButton.addEventListener("click", async () => {
-        const selectedId = selectedArrangementId || "";
-        const record = savedArrangementsCache.find((item) => String(item.id) === selectedId);
-        if (!record) {
-            setArrangementsStatus("There are no stored arrangements yet.", false);
-            return;
-        }
+        const record = savedArrangementsCache.find(item => String(item.id) === selectedArrangementId);
+        if (!record || arrangementsBusy) return;
+
+        const request = arrangementsPickerRequest;
+        const forBroadcast = arrangementsForBroadcast;
+        const mode = radiographMode;
+        const userId = currentSupabaseUser?.id;
+        arrangementsBusy = true;
         arrangementsLoadButton.disabled = true;
-        setArrangementsStatus(`Loading ${record.name || "arrangement"}...`, false);
+        setArrangementsStatus(`Loading ${record.name || "arrangement"}…`, false);
         try {
-            await withTimeout(
-                loadCloudMidiRecord(record, { statusMessage: `Arrangement loaded: ${record.name || "Saved arrangement"}` }),
-                CLOUD_SAVE_TIMEOUT_MS,
-                "Loading arrangement timed out. Refresh the page and try again."
-            );
-            hideArrangementsModal();
+            if (forBroadcast) {
+                const arrangement = await withTimeout(
+                    loadArrangementForBroadcast(record.id, userId, mode),
+                    CLOUD_SAVE_TIMEOUT_MS,
+                    "Loading this arrangement for broadcast timed out. Try again."
+                );
+                if (arrangementsPickerRequest !== request || currentSupabaseUser?.id !== userId) return;
+                radiographBroadcast = arrangement;
+                updateRadiographBroadcastPanel();
+            } else {
+                await withTimeout(
+                    loadCloudMidiRecord(record, { statusMessage: `Arrangement loaded: ${record.name || "Saved arrangement"}` }),
+                    CLOUD_SAVE_TIMEOUT_MS,
+                    "Loading arrangement timed out. Refresh the page and try again."
+                );
+            }
+            if (arrangementsPickerRequest === request) hideArrangementsModal();
         } catch (error) {
-            console.error("Failed to load arrangement:", error);
-            setArrangementsStatus(error?.message || "Unable to load arrangement.", true);
+            if (arrangementsPickerRequest === request) {
+                console.error("Failed to load arrangement:", error);
+                setArrangementsStatus(error?.message || "Unable to load arrangement.", true);
+            }
         } finally {
-            arrangementsLoadButton.disabled = !savedArrangementsCache.length;
+            if (arrangementsPickerRequest === request) {
+                arrangementsBusy = false;
+                arrangementsLoadButton.disabled = !selectedArrangementId;
+            }
         }
     });
 }
+
 if (saveArrangementCancelButton) {
     saveArrangementCancelButton.addEventListener("click", () => {
         hideSaveArrangementModal();
@@ -3749,7 +4396,7 @@ if (saveArrangementConfirmButton) {
         hideSaveArrangementModal();
         setStatus(`Saving arrangement: ${arrangementName}...`, false);
         try {
-            await saveArrangementToLibrary(arrangementName);
+            await saveArrangementToLibrary(arrangementName, normalizeArrangementTags(saveArrangementTagsInput.value));
         } catch (error) {
             console.error("Unable to save arrangement:", error);
             setStatus(error?.message || "Unable to save arrangement to library.", true);
@@ -3889,6 +4536,7 @@ stopButton.addEventListener("click", () => {
 });
 loopToggle.addEventListener("change", () => {
     fluidRenderer.setLoopEnabled(loopToggle.checked);
+    if (!loopToggle.checked) clearTimeout(loopRestartTimer);
 });
 if (recordButton) {
     recordButton.addEventListener("click", () => toggleRecording());
@@ -3908,6 +4556,9 @@ progressBar.addEventListener("change", async () => {
     if (!currentSong) {
         return;
     }
+    playbackRequest++;
+    clearTimeout(loopRestartTimer);
+    dismissKeyframePrompt();
     if (isPlaying) {
         applyAllProgramOverrides();
         const success = await scheduleNotesFromOffset(pauseOffset);
@@ -3917,7 +4568,7 @@ progressBar.addEventListener("change", async () => {
             logProgramAssignments("post-scrub resume");
         }
     } else {
-        await fluidRenderer.seek(pauseOffset);
+        await fluidRenderer.seek(prepareKeyframesForPlayback(pauseOffset));
         applyAllProgramOverrides();
         updateProgressUI(pauseOffset);
         logProgramAssignments("post-scrub paused");
@@ -3952,6 +4603,7 @@ tempoSlider.addEventListener("input", () => {
     currentTempoBpm = tempoPercentToBpm(percent);
     customTempoActive = currentTempoPercent !== 100;
     applyTempoChange();
+    recordKeyframeSettings({ tempo_percent: currentTempoPercent });
     queueCloudSettingsSave();
 });
 updateTempoControlsState(false);
@@ -3965,6 +4617,7 @@ if (tempoResetButton) {
         currentTempoBpm = tempoPercentToBpm(currentTempoPercent);
         customTempoActive = false;
         applyTempoChange();
+        recordKeyframeSettings({ tempo_percent: currentTempoPercent });
         queueCloudSettingsSave();
     });
 }
@@ -4002,6 +4655,7 @@ if (modeSelect) {
         updateModeStatus();
         applyActiveTuning();
         setStatus(`Mode applied: ${currentMode}`, false);
+        recordKeyframeSettings({ mode: currentMode });
         queueCloudSettingsSave();
     });
 }
@@ -4034,9 +4688,9 @@ async function bootstrapApp() {
     const config = await loadAppConfig();
     applyAppConfig(config);
     refreshRadiographAudioSource();
+    await initSupabaseAuth();
     startRadiographStatusPolling();
     startRadiographLeaderboardRotation();
-    await initSupabaseAuth();
     refreshFavoritesMenus();
     syncFavoriteSelection("__default__");
     updateModeStatus();
@@ -4047,7 +4701,7 @@ async function bootstrapApp() {
     loadScalaManifest();
     applyActiveTuning();
     loadSampleManifest();
-    updateRadiographDraftSummary();
+    updateRadiographBroadcastPanel();
 }
 
 bootstrapPromise = bootstrapApp().catch((error) => {
@@ -4100,9 +4754,13 @@ async function loadMidiFromBuffer(buffer, displayName = "MIDI file", source = nu
         trackBanks.clear();
         trackVolumes.clear();
         trackTransposes.clear();
+        const usedChannels = new Set();
+        const sourceChannels = new Set(playableTracks.map(track => track.channel));
+        const freeChannels = Array.from({ length: 16 }, (_, channel) => channel)
+            .filter(channel => !sourceChannels.has(channel));
         const channelAssignments = [];
         playableTracks.forEach((track, idx) => {
-            const slot = channelAssignments.length;
+            const slot = idx;
             track.slot = slot;
             let channel = Number.isFinite(track.channel)
                 ? Math.max(0, Math.min(15, Math.round(track.channel)))
@@ -4110,10 +4768,14 @@ async function loadMidiFromBuffer(buffer, displayName = "MIDI file", source = nu
             if (!Number.isFinite(track.channel)) {
                 console.warn("Track has no MIDI channel. Falling back to channel", channel + 1);
             }
+            if (usedChannels.has(channel) && freeChannels.length) {
+                channel = freeChannels.shift();
+            }
+            usedChannels.add(channel);
             track.channelNumber = channel;
             trackChannels.set(slot, channel);
-            const initialProgram = clampProgram(track.program ?? 0);
-            const initialBank = getDefaultBankForChannel(channel);
+            const initialProgram = 0;
+            const initialBank = getDefaultTrackBank(track);
             trackPrograms.set(slot, initialProgram);
             trackBanks.set(slot, initialBank);
             trackVolumes.set(slot, 1);
@@ -4126,9 +4788,16 @@ async function loadMidiFromBuffer(buffer, displayName = "MIDI file", source = nu
         channelAssignmentsSnapshot = channelAssignments.map(item => ({ ...item }));
         tempoSnapshot = {
             baseBpm: baseTempoBpm,
-            targetBpm: currentTempoBpm
+            targetBpm: currentTempoBpm,
+            totalTicks: parsedSong.durationTicks
         };
-        await fluidRenderer.loadMidi(baseMidiBuffer.slice(0), currentSongBaseDuration, [], tempoSnapshot);
+        const playbackMidi = buildTransformedMidiBuffer(baseMidiBuffer);
+        await fluidRenderer.loadMidi(
+            encodeMidiVoices(playbackMidi),
+            currentSongBaseDuration,
+            channelAssignmentsSnapshot,
+            tempoSnapshot
+        );
         fluidRenderer.setLoopEnabled(loopToggle.checked);
         applyActiveTuning();
         applyAllChannelVolumes();
@@ -4145,7 +4814,6 @@ async function loadMidiFromBuffer(buffer, displayName = "MIDI file", source = nu
 
         currentSong.displayName = displayName;
         setSongTitle(displayName);
-        songDisplay.value = summarizeMidi(parsedSong);
         songPanel.classList.remove("is-hidden");
         controlsPanel.classList.remove("is-hidden");
         instrumentPanel.classList.remove("is-hidden");
@@ -4157,9 +4825,11 @@ async function loadMidiFromBuffer(buffer, displayName = "MIDI file", source = nu
         updateModeStatus();
         updateTransposeStatus();
         resetFavoriteStateForNewSong();
+        arrangementKeyframes = [captureKeyframe(0)];
+        activeKeyframe = arrangementKeyframes[0];
+        dismissKeyframePrompt();
         setStatus("Loaded. Press Play to start.", false);
         setSaveArrangementEnabled(true);
-        updateRadiographDraftSummary();
         queueCloudSettingsSave();
     } catch (error) {
         if (selectionToken !== latestSelectionToken) {
@@ -4298,6 +4968,7 @@ function normalizeMidiData(midi) {
     return {
         name: midi.name || "",
         duration: songDuration,
+        durationTicks: midi.durationTicks,
         tracks,
         tempos
     };
@@ -4306,6 +4977,7 @@ function normalizeMidiData(midi) {
 function renderInstrumentMenus() {
     instrumentGrid.innerHTML = "";
     trackVisualState.clear();
+    updateSongInstrumentSummary();
     playableTracks.forEach(track => {
         const channel = track.channelNumber ?? track.channel ?? trackChannels.get(track.slot) ?? 0;
         const trackLabelNumber = Number.isFinite(track.index) ? (track.index + 1) : (track.slot + 1);
@@ -4323,12 +4995,7 @@ function renderInstrumentMenus() {
         meter.appendChild(meterLabel);
 
         const select = document.createElement("select");
-        if (channel === GM_PERCUSSION_CHANNEL) {
-            const percussionOption = document.createElement("option");
-            percussionOption.value = buildInstrumentOptionValue(GM_PERCUSSION_BANK, 0);
-            percussionOption.textContent = "128:000 - Percussion";
-            select.appendChild(percussionOption);
-        }
+        select.appendChild(new Option("Percussion Set", buildInstrumentOptionValue(GM_PERCUSSION_BANK, 0)));
         GM_INSTRUMENTS.forEach((instrumentName, programNumber) => {
             const option = document.createElement("option");
             option.value = buildInstrumentOptionValue(GM_MELODIC_BANK, programNumber);
@@ -4341,18 +5008,20 @@ function renderInstrumentMenus() {
         );
         select.addEventListener("change", () => {
             const nextSelection = parseInstrumentOptionValue(select.value, channel);
+            const previousBank = getTrackBank(track.slot);
             trackPrograms.set(track.slot, nextSelection.program);
             trackBanks.set(track.slot, nextSelection.bank);
-            const channelNumber = trackChannels.get(track.slot);
-            if (channelNumber !== undefined) {
-                queueProgramChange(track.slot, channelNumber, nextSelection.program, nextSelection.bank);
+            const assignment = channelAssignmentsSnapshot.find(item => item.trackIndex === track.slot);
+            if (assignment) {
+                Object.assign(assignment, nextSelection);
+                fluidRenderer.programChange(assignment.channel, assignment.program, assignment.bank);
             }
             setStatus(`Instrument preference stored for ${track.name}`, false);
-            if (pendingArrangementRefresh) {
-                clearTimeout(pendingArrangementRefresh);
-                pendingArrangementRefresh = null;
+            updateSongInstrumentSummary();
+            recordKeyframeTrackSettings(track.slot, { bank_msb: nextSelection.bank, program: nextSelection.program });
+            if (arrangementKeyframes.length > 1 && previousBank !== nextSelection.bank && trackTransposes.get(track.slot)) {
+                scheduleArrangementRefresh("Keyframe instrument updated.");
             }
-            applyAllProgramOverrides();
             queueCloudSettingsSave();
         });
 
@@ -4376,6 +5045,7 @@ function renderInstrumentMenus() {
         volumeInput.addEventListener("input", () => {
             const nextValue = clampTrackVolume(Number(volumeInput.value));
             trackVolumes.set(track.slot, nextValue);
+            recordKeyframeTrackSettings(track.slot, { volume: nextValue });
             volumeValue.textContent = formatTrackVolumeLabel(nextValue);
             volumeInput.style.setProperty("--volume-fill", `${(nextValue * 100).toFixed(0)}%`);
             const channelNumber = trackChannels.get(track.slot);
@@ -4419,10 +5089,11 @@ function renderInstrumentMenus() {
         transposeUp.textContent = "+";
         const applyTrackTranspose = (nextValue) => {
             trackTransposes.set(track.slot, nextValue);
+            recordKeyframeTrackSettings(track.slot, { transpose_semitones: nextValue });
             trackTransposeInput.value = nextValue.toString();
             const statusMessage = `Track transpose updated: ${track.name} ${nextValue >= 0 ? "+" : ""}${nextValue}`;
             const channelNumber = track.channelNumber ?? track.channel ?? trackChannels.get(track.slot) ?? 0;
-            if (channelNumber === GM_PERCUSSION_CHANNEL) {
+            if (getTrackBank(track.slot, channelNumber) === GM_PERCUSSION_BANK) {
                 scheduleArrangementRefresh(statusMessage);
             } else {
                 applyActiveTuning();
@@ -4467,10 +5138,25 @@ function renderInstrumentMenus() {
     });
 }
 
+function updateSongInstrumentSummary() {
+    if (!currentSong) return;
+    songDisplay.value = summarizeMidi({
+        ...currentSong,
+        tracks: playableTracks.map(track => ({
+            ...track,
+            channel: trackChannels.get(track.slot),
+            instrumentName: getTrackBank(track.slot) === GM_PERCUSSION_BANK
+                ? "Percussion Set"
+                : getInstrumentName(trackPrograms.get(track.slot))
+        }))
+    });
+}
+
 async function play() {
     if (!currentSong) {
         return;
     }
+    const request = ++playbackRequest;
     isUserScrubbing = false;
     console.log("[Play] Clicked");
     try {
@@ -4482,6 +5168,7 @@ async function play() {
         return;
     }
 
+    if (request !== playbackRequest) return;
     console.log("[Play] isPrepared:", isPrepared);
     if (!isPrepared) {
         setStatus("Load a MIDI file to begin.", true);
@@ -4499,10 +5186,6 @@ async function play() {
         console.warn("[Play] No schedulable notes");
         return;
     }
-    setTimeout(() => {
-        applyAllProgramOverrides();
-        applyAllChannelVolumes();
-    }, 60);
     isPlaying = true;
     pauseOffset = 0;
     startProgressUpdates();
@@ -4510,13 +5193,14 @@ async function play() {
 }
 
 function pausePlayback() {
+    playbackRequest++;
     if (!isPlaying) {
         return;
     }
+    const elapsed = getElapsedPlaybackSeconds();
     fluidRenderer.pause();
     const ctx = audioContext;
-    const duration = currentSong?.duration || 0;
-    const elapsed = ctx ? Math.max(0, ctx.currentTime - playbackStartTime) : pauseOffset;
+    const duration = getTimelineDuration();
     pauseOffset = Math.min(duration, elapsed);
     playbackStartTime = ctx ? ctx.currentTime - pauseOffset : 0;
     stopProgressUpdates(false);
@@ -4528,11 +5212,15 @@ function stopPlayback(autoTriggered) {
     if (!currentSong) {
         return;
     }
+    playbackRequest++;
+    clearTimeout(loopRestartTimer);
     isPlaying = false;
     pauseOffset = 0;
     playbackStartTime = 0;
     isUserScrubbing = false;
     fluidRenderer.stop();
+    dismissKeyframePrompt();
+    prepareKeyframesForPlayback(0);
     fluidRenderer.reapplyTuning();
     applyTempoChange();
     stopProgressUpdates(true);
@@ -4544,7 +5232,182 @@ function stopPlayback(autoTriggered) {
     setStatus(autoTriggered ? "Playback complete" : "Stopped", false);
 }
 
+function readSavedKeyframes(frames) {
+    if (!Array.isArray(frames) || frames[0]?.position !== 0) return [];
+    const valid = frames.every((frame, index) =>
+        Number.isFinite(frame?.position) && frame.position >= 0 && frame.position < 1
+        && (index === 0 || frame.position > frames[index - 1]?.position)
+        && Array.isArray(frame.settings?.track_overrides)
+        && Array.isArray(frame.tuning?.table) && frame.tuning.table.length === 128
+    );
+    return valid ? structuredClone(frames) : [];
+}
+
+function getTimelineDuration() {
+    return arrangementKeyframes.length > 1 ? currentSongBaseDuration : (currentSong?.duration || 0);
+}
+
+function keyframeAt(position) {
+    const next = arrangementKeyframes.findIndex(frame => frame.position > position + 1e-8);
+    return next < 0 ? arrangementKeyframes.at(-1) : arrangementKeyframes[Math.max(0, next - 1)];
+}
+
+function captureKeyframe(position) {
+    return {
+        position,
+        settings: buildArrangementSettingsSnapshot(),
+        tuning: structuredClone(activeTuning)
+    };
+}
+
+function recordKeyframeSettings(settings) {
+    if (activeKeyframe) Object.assign(activeKeyframe.settings, settings);
+}
+
+function recordKeyframeTrackSettings(slot, settings) {
+    const track = activeKeyframe?.settings.track_overrides.find(override => override.track_index === slot);
+    if (track) Object.assign(track, settings);
+}
+
+function applyKeyframe(frame, { restore = false } = {}) {
+    if (!frame || (frame === activeKeyframe && !restore)) return;
+    activeKeyframe = frame;
+    const settings = frame.settings;
+    currentMode = settings.mode;
+    currentTranspose = settings.transpose_semitones;
+    currentTempoPercent = settings.tempo_percent;
+    activeTuning = structuredClone(frame.tuning);
+    for (const override of settings.track_overrides) {
+        const slot = override.track_index;
+        if (!trackChannels.has(slot)) continue;
+        trackPrograms.set(slot, override.program);
+        trackBanks.set(slot, override.bank_msb);
+        trackVolumes.set(slot, override.volume);
+        trackTransposes.set(slot, override.transpose_semitones);
+    }
+    updateModeStatus();
+    transposeInput.value = String(currentTranspose);
+    updateTransposeStatus();
+    if (!Array.from(tuningSelect.options).some(option => option.value === activeTuning.id)) {
+        tuningSelect.add(new Option(activeTuning.name, activeTuning.id));
+    }
+    tuningResetButton.disabled = activeTuning.id === DEFAULT_TUNING_ID;
+    applyTempoChange();
+    applyActiveTuning();
+    renderInstrumentMenus();
+    updateKeyframeControls();
+}
+
+function prepareKeyframesForPlayback(seconds) {
+    if (arrangementKeyframes.length < 2) return seconds;
+    const position = seconds / (getTimelineDuration() || 1);
+    applyKeyframe(keyframeAt(position), { restore: true });
+    return position * fluidRenderer.songDuration;
+}
+
+function formatKeyframeTime(position) {
+    const seconds = position * getTimelineDuration();
+    const wholeSeconds = Math.floor(seconds);
+    return `${formatDuration(wholeSeconds)}.${Math.floor((seconds - wholeSeconds) * 10)}`;
+}
+
+function updateKeyframeControls() {
+    const available = arrangementKeyframes.length > 0 && !recordingActive;
+    keyframePlace.disabled = !available;
+    for (const [index, marker] of Array.from(keyframeMarkers.children).entries()) {
+        marker.disabled = !available;
+        if (arrangementKeyframes[index] === activeKeyframe) {
+            marker.setAttribute("aria-current", "true");
+        } else {
+            marker.removeAttribute("aria-current");
+        }
+    }
+    const hasCandidate = available && keyframeCandidate !== null && keyframeCandidate > 0;
+    keyframeConfirmation.classList.toggle("is-hidden", !hasCandidate);
+    keyframeConfirm.disabled = !hasCandidate;
+    if (hasCandidate) {
+        keyframeConfirm.checked = arrangementKeyframes.some(frame => frame.position === keyframeCandidate);
+        const time = formatKeyframeTime(keyframeCandidate);
+        keyframeStatus.textContent = keyframeConfirm.checked
+            ? `Editing settings at ${time}. Uncheck to remove this keyframe.`
+            : `Check Keyframe to store changes at ${time}.`;
+    } else {
+        const index = arrangementKeyframes.indexOf(activeKeyframe);
+        keyframeStatus.textContent = index > 0
+            ? `Keyframe ${index + 1} at ${formatKeyframeTime(activeKeyframe.position)}.`
+            : "Keyframe 1 holds the starting settings.";
+    }
+}
+
+function renderKeyframeLane() {
+    fluidRenderer.onPlaybackPosition = arrangementKeyframes.length > 1 ? followPlaybackKeyframes : null;
+    keyframeMarkers.replaceChildren(...arrangementKeyframes.map((frame, index) => {
+        const marker = document.createElement("button");
+        marker.type = "button";
+        marker.className = "keyframe-marker";
+        marker.textContent = String(index + 1);
+        marker.style.setProperty("--keyframe-position", `${frame.position * 100}%`);
+        marker.setAttribute("aria-label", `Keyframe ${index + 1} at ${formatKeyframeTime(frame.position)}`);
+        marker.addEventListener("click", () => editKeyframeAt(frame.position));
+        return marker;
+    }));
+    updateKeyframeControls();
+}
+
+function dismissKeyframePrompt() {
+    keyframeCandidate = null;
+    renderKeyframeLane();
+}
+
+async function editKeyframeAt(position) {
+    clearTimeout(loopRestartTimer);
+    if (!isPrepared || recordingActive) return;
+    pausePlayback();
+    keyframeCandidate = position;
+    pauseOffset = position * getTimelineDuration();
+    await fluidRenderer.seek(prepareKeyframesForPlayback(pauseOffset));
+    updateProgressUI(pauseOffset, { overrideScrubLock: true });
+    updateKeyframeControls();
+}
+
+keyframePlace.addEventListener("click", event => {
+    const bounds = keyframeMarkers.getBoundingClientRect();
+    const current = Number(progressBar.value) / (getTimelineDuration() || 1);
+    const position = event.detail ? (event.clientX - bounds.left) / bounds.width : current;
+    const ticks = currentSong.durationTicks || 1;
+    const snapped = Math.max(0, Math.min(ticks - 1, Math.round(position * ticks))) / ticks;
+    editKeyframeAt(snapped).then(() => {
+        if (!event.detail && !keyframeConfirm.disabled) keyframeConfirm.focus();
+    });
+});
+
+keyframeConfirm.addEventListener("change", async () => {
+    if (keyframeCandidate === null || !isPrepared || recordingActive) return;
+    const position = keyframeCandidate;
+    if (keyframeConfirm.checked) {
+        const frame = captureKeyframe(position);
+        arrangementKeyframes.push(frame);
+        arrangementKeyframes.sort((a, b) => a.position - b.position);
+        activeKeyframe = frame;
+    } else {
+        arrangementKeyframes = arrangementKeyframes.filter(frame => frame.position !== position);
+        applyKeyframe(keyframeAt(position));
+    }
+    pauseOffset = position * getTimelineDuration();
+    renderKeyframeLane();
+    clearTimeout(pendingArrangementRefresh);
+    pendingArrangementRefresh = null;
+    await rebuildTransformedPlayback("Keyframes updated.");
+});
+
 function resetPlaybackState() {
+    playbackRequest++;
+    clearTimeout(loopRestartTimer);
+    clearTimeout(pendingArrangementRefresh);
+    pendingArrangementRefresh = null;
+    arrangementKeyframes = [];
+    activeKeyframe = null;
+    dismissKeyframePrompt();
     fluidRenderer.stop();
     stopProgressUpdates(true);
     isPlaying = false;
@@ -4576,7 +5439,7 @@ function startProgressUpdates() {
         const now = performance.now();
         if (now - lastProgressUpdateTime >= PROGRESS_MIN_INTERVAL_MS) {
             lastProgressUpdateTime = now;
-            const duration = currentSong.duration || 0;
+            const duration = getTimelineDuration();
             const elapsed = isPlaying
                 ? getElapsedPlaybackSeconds()
                 : pauseOffset;
@@ -4599,7 +5462,7 @@ function stopProgressUpdates(resetToStart) {
 
 function updateProgressUI(seconds, options = {}) {
     const { overrideScrubLock = false } = options;
-    const duration = currentSong?.duration || 0;
+    const duration = getTimelineDuration();
     progressBar.min = "0";
     progressBar.max = duration.toString();
     progressBar.step = Math.max(0.01, duration / 2000 || 0.01).toString();
@@ -4613,6 +5476,7 @@ function updateProgressUI(seconds, options = {}) {
     }
     const ratio = duration > 0 ? Math.max(0, Math.min(1, seconds / duration)) : 0;
     progressBar.style.setProperty("--progress-fill", `${(ratio * 100).toFixed(2)}%`);
+    keyframeMarkers.style.setProperty("--keyframe-playhead", `${(ratio * 100).toFixed(2)}%`);
     if (progressElapsed) {
         progressElapsed.textContent = formatDuration(seconds);
     }
@@ -4625,6 +5489,10 @@ function updateProgressUI(seconds, options = {}) {
 function getElapsedPlaybackSeconds() {
     if (!currentSong || !audioContext || !Number.isFinite(playbackStartTime)) {
         return 0;
+    }
+    if (arrangementKeyframes.length > 1) {
+        return Math.min(getTimelineDuration(), fluidRenderer.getCurrentSeconds()
+            / (fluidRenderer.songDuration || 1) * getTimelineDuration());
     }
     const elapsed = Math.max(0, audioContext.currentTime - playbackStartTime);
     const duration = currentSong.duration || 0;
@@ -4698,6 +5566,9 @@ async function loadSampleManifest() {
             ...item,
             url: resolveMidiAssetUrl(item?.url)
         }));
+        resolved.forEach(item => {
+            if (item.id && typeof item.folder === "string") includedMidiFolders.set(item.id, item.folder);
+        });
         populateSampleFolderSelect(resolved);
         populateSampleMidiSelect(resolved);
         sampleManifestLoaded = true;
@@ -4807,6 +5678,7 @@ async function loadSampleByRecord(sample) {
             source_type: "sample",
             source_url: sample.url,
             sample_id: sample.id || sample.url,
+            folder: sample.folder,
             file_name: sample.name
         });
     } catch (error) {
@@ -4843,31 +5715,11 @@ function setAudioEnabledState(enabled) {
     }
 }
 
-function queueProgramChange(trackIndex, channel, program, bank = getDefaultBankForChannel(channel)) {
-    if (!Number.isFinite(channel)) {
-        return;
-    }
-    pendingProgramUpdates.set(trackIndex, { channel, program, bank });
-    const snapshotEntry = channelAssignmentsSnapshot.find(item => item.trackIndex === trackIndex);
-    if (snapshotEntry) {
-        snapshotEntry.program = program;
-        snapshotEntry.bank = bank;
-    }
-    if (!programFlushHandle) {
-        programFlushHandle = requestAnimationFrame(() => {
-            programFlushHandle = null;
-            pendingProgramUpdates.forEach(({ channel: queuedChannel, program: queuedProgram, bank: queuedBank }) => {
-                fluidRenderer.programChange(queuedChannel, queuedProgram, queuedBank);
-            });
-            pendingProgramUpdates.clear();
-            applyActiveTuning();
-            applyAllChannelVolumes();
-        });
-    }
-}
-
 function handleLoadFailure() {
     currentSong = null;
+    arrangementKeyframes = [];
+    activeKeyframe = null;
+    dismissKeyframePrompt();
     currentMidiBuffer = null;
     currentMidiSource = null;
     transformedMidiBuffer = null;
@@ -4955,7 +5807,9 @@ function playConfirmationClick() {
 
 async function scheduleNotesFromOffset(offsetSeconds) {
     try {
-        await fluidRenderer.playFrom(offsetSeconds);
+        clearTimeout(loopRestartTimer);
+        dismissKeyframePrompt();
+        await fluidRenderer.playFrom(prepareKeyframesForPlayback(offsetSeconds));
         const ctx = getAudioContext();
         playbackStartTime = ctx.currentTime - offsetSeconds;
         logProgramAssignments(`playFrom offset ${offsetSeconds.toFixed(2)}`);
@@ -4976,11 +5830,7 @@ function applyActiveTuning() {
     fluidRenderer.applyTuning(effectiveTable, activeTuning.name || "Custom Tuning");
     applyAllChannelTunings(effectiveTable, true);
     applyAllProgramOverrides();
-    setTimeout(() => {
-        applyAllChannelTunings(effectiveTable, true);
-        applyAllProgramOverrides();
-        applyAllChannelVolumes();
-    }, 60);
+
     const statusLabel = activeTuning.id === DEFAULT_TUNING_ID ? "12-TET" : (activeTuning.name || "Custom");
     setTuningStatus(`${statusLabel} (${currentMode}, ${currentTranspose >= 0 ? "+" : ""}${currentTranspose})`, false);
     if (tuningSelect && tuningSelect.value !== activeTuning.id) {
@@ -5002,6 +5852,7 @@ function applyTransposeChange(value) {
     updateTransposeStatus();
     applyActiveTuning();
     setStatus(`Transpose applied: ${clamped >= 0 ? "+" : ""}${clamped}`, false);
+    recordKeyframeSettings({ transpose_semitones: currentTranspose });
     queueCloudSettingsSave();
 }
 
@@ -5170,7 +6021,7 @@ function capturePlaybackState() {
     }
     const wasPlaying = isPlaying;
     const resumePoint = wasPlaying
-        ? Math.max(0, Math.min(getElapsedPlaybackSeconds(), currentSong.duration || getElapsedPlaybackSeconds()))
+        ? Math.max(0, Math.min(getElapsedPlaybackSeconds(), getTimelineDuration()))
         : pauseOffset;
     if (wasPlaying) {
         fluidRenderer.pause();
@@ -5193,12 +6044,17 @@ async function rebuildTransformedPlayback(message) {
     setStatus("Updating arrangement...", false);
     const state = capturePlaybackState();
     try {
-        const playableBuffer = await buildTransformedMidiBuffer(baseMidiBuffer);
-        transformedMidiBuffer = playableBuffer.slice(0);
+        transformedMidiBuffer = buildTransformedMidiBuffer(baseMidiBuffer);
         arrangementDirty = true;
-        await fluidRenderer.loadMidi(playableBuffer, currentSongBaseDuration, channelAssignmentsSnapshot, tempoSnapshot);
+        await fluidRenderer.loadMidi(
+            encodeMidiVoices(transformedMidiBuffer),
+            currentSongBaseDuration,
+            channelAssignmentsSnapshot,
+            tempoSnapshot
+        );
         await fluidRenderer.waitForTotalTicks?.();
         fluidRenderer.setLoopEnabled(loopToggle.checked);
+        applyTempoChange();
         applyActiveTuning();
         applyAllProgramOverrides();
         applyAllChannelVolumes();
@@ -5206,7 +6062,7 @@ async function rebuildTransformedPlayback(message) {
 
         if (state.wasPlaying) {
             // For active playback, seek then resume to avoid resetting to start.
-            await fluidRenderer.seek(state.resumePoint);
+            await fluidRenderer.seek(prepareKeyframesForPlayback(state.resumePoint));
             applyAllProgramOverrides();
             applyAllChannelVolumes();
             fluidRenderer.resumePlayback();
@@ -5218,7 +6074,7 @@ async function rebuildTransformedPlayback(message) {
             startProgressUpdates();
         } else {
             // When paused, just seek and keep transport paused.
-            await fluidRenderer.seek(state.resumePoint);
+            await fluidRenderer.seek(prepareKeyframesForPlayback(state.resumePoint));
             pauseOffset = state.resumePoint;
             updateProgressUI(state.resumePoint, { overrideScrubLock: true });
             logProgramAssignments("post-seek (paused)");
@@ -5242,36 +6098,14 @@ function scheduleArrangementRefresh(label) {
     }, 50);
 }
 
-async function sanitizeMidiForPlayback(arrayBuffer) {
-    if (typeof Midi === "undefined") {
-        return arrayBuffer;
-    }
-    try {
-        const midi = new Midi(arrayBuffer);
-        midi.tracks = midi.tracks.filter(track => Array.isArray(track.notes) && track.notes.length > 0);
-        midi.tracks.forEach(stripProgramAndBankEvents);
-        const sanitized = midi.toArray();
-        try {
-            // Double-check no program changes remain after serialization.
-            const verify = new Midi(sanitized);
-            verify.tracks = verify.tracks.filter(track => Array.isArray(track.notes) && track.notes.length > 0);
-            verify.tracks.forEach(stripProgramAndBankEvents);
-            return verify.toArray();
-        } catch {
-            return sanitized;
-        }
-    } catch (error) {
-        console.warn("Failed to sanitize MIDI buffer:", error);
-        return arrayBuffer;
-    }
-}
-
-async function buildTransformedMidiBuffer(arrayBuffer) {
+function buildTransformedMidiBuffer(arrayBuffer) {
     if (typeof Midi === "undefined") {
         return arrayBuffer.slice(0);
     }
     try {
         const midi = new Midi(arrayBuffer);
+        const keyed = arrangementKeyframes.length > 1;
+        const totalTicks = currentSong?.durationTicks || midi.durationTicks || 1;
         midi.tracks = midi.tracks.filter(track => Array.isArray(track.notes) && track.notes.length > 0);
         midi.tracks.forEach((track, idx) => {
             stripProgramAndBankEvents(track);
@@ -5279,7 +6113,7 @@ async function buildTransformedMidiBuffer(arrayBuffer) {
             const slot = assignment?.trackIndex ?? idx;
             const assignedChannel = assignment?.channel ?? trackChannels.get(slot) ?? (slot % 16);
             const trackTranspose = trackTransposes.get(slot) ?? 0;
-            const trackVolume = clampTrackVolume(trackVolumes.get(slot) ?? 1);
+            const trackVolume = keyed ? 1 : clampTrackVolume(trackVolumes.get(slot) ?? 1);
             track.channel = assignedChannel;
             if (track.instrument && typeof track.instrument === "object") {
                 track.instrument.channel = assignedChannel;
@@ -5293,8 +6127,15 @@ async function buildTransformedMidiBuffer(arrayBuffer) {
                 if (!Number.isFinite(note?.midi)) {
                     return;
                 }
-                const remapped = clampMidiValue(note.midi + trackTranspose);
-                note.midi = remapped;
+                if (keyed) {
+                    const frame = keyframeAt(note.ticks / totalTicks);
+                    const override = frame.settings.track_overrides.find(item => item.track_index === slot);
+                    if (override?.bank_msb === GM_PERCUSSION_BANK) {
+                        note.midi = clampMidiValue(note.midi + override.transpose_semitones);
+                    }
+                } else {
+                    note.midi = clampMidiValue(note.midi + trackTranspose);
+                }
                 note.channel = assignedChannel;
                 if (Number.isFinite(note.velocity)) {
                     note.velocity = clampVelocity(note.velocity * trackVolume);
@@ -5326,6 +6167,53 @@ async function buildTransformedMidiBuffer(arrayBuffer) {
         console.warn("Failed to transform MIDI buffer:", error);
         return arrayBuffer.slice(0);
     }
+}
+
+function encodeMidiVoices(midi, banks = null) {
+    const bytes = new Uint8Array(midi);
+    const view = new DataView(bytes.buffer);
+    // Tone MIDI writes a conductor track and then starts each instrument track
+    // with its name and a tick-zero program change. Replace that program event.
+    const headerEnd = 8 + view.getUint32(4);
+    const conductorEnd = headerEnd + 8 + view.getUint32(headerEnd + 4);
+    const chunks = [bytes.subarray(0, conductorEnd)];
+    for (let offset = conductorEnd, index = 0; offset < bytes.length; index += 1) {
+        const start = offset + 8;
+        const end = start + view.getUint32(offset + 4);
+        let programOffset = start + 3;
+        let nameLength = 0;
+        let lengthByte;
+        do {
+            lengthByte = bytes[programOffset++];
+            nameLength = (nameLength << 7) | (lengthByte & 0x7f);
+        } while (lengthByte & 0x80);
+        programOffset += nameLength;
+        const programChange = bytes[programOffset + 1];
+        if (bytes[start] !== 0 || bytes[start + 1] !== 0xff || bytes[start + 2] !== 0x03
+            || bytes[programOffset] !== 0 || (programChange & 0xf0) !== 0xc0) {
+            throw new Error("Unable to encode the MIDI instrument assignments.");
+        }
+        const channel = programChange & 0x0f;
+        const program = banks ? bytes.subarray(programOffset, programOffset + 3) : new Uint8Array(0);
+        const bankSelect = banks ? Uint8Array.of(
+            0, 0xb0 | channel, 0, banks[index] === GM_PERCUSSION_BANK ? 127 : 0,
+            0, 0xb0 | channel, 32, 0
+        ) : new Uint8Array(0);
+        const trackHeader = bytes.slice(offset, start);
+        new DataView(trackHeader.buffer).setUint32(
+            4, end - start - 3 + bankSelect.length + program.length
+        );
+        chunks.push(trackHeader, bytes.subarray(start, programOffset), bankSelect, program,
+            bytes.subarray(programOffset + 3, end));
+        offset = end;
+    }
+    const output = new Uint8Array(chunks.reduce((length, chunk) => length + chunk.length, 0));
+    let cursor = 0;
+    for (const chunk of chunks) {
+        output.set(chunk, cursor);
+        cursor += chunk.length;
+    }
+    return output.buffer;
 }
 
 function stripProgramAndBankEvents(track) {
@@ -5418,8 +6306,7 @@ async function loadScalaManifest() {
             console.log("[Scala] Active source", source);
             tuningSelect.disabled = false;
             if (tuningFolderSelect) tuningFolderSelect.disabled = false;
-            // Keep reset button disabled until a non-default tuning is selected
-            if (tuningResetButton) tuningResetButton.disabled = true;
+            if (tuningResetButton) tuningResetButton.disabled = activeTuning.id === DEFAULT_TUNING_ID;
             return;
         } catch (error) {
             console.warn("Failed to load tuning source", source?.label || source?.manifestUrl, error);
@@ -5466,8 +6353,6 @@ function filterTuningsByFolder(folderValue) {
     const existing = tuningSelect.querySelectorAll("option[value]:not([value='__equal__'])");
     existing.forEach(option => option.remove());
     const fragment = document.createDocumentFragment();
-    const selectedValue = tuningSelect.value;
-    let nextSelection = selectedValue;
     tuningManifest.forEach(entry => {
         if (!entry?.path) {
             return;
@@ -5481,51 +6366,46 @@ function filterTuningsByFolder(folderValue) {
         option.value = entry.path;
         option.textContent = entry.name || entry.path.split("/").pop();
         fragment.appendChild(option);
-        if (selectedValue === entry.path) {
-            nextSelection = selectedValue;
-        }
     });
     tuningSelect.appendChild(fragment);
-    if (nextSelection && tuningSelect.querySelector(`option[value="${nextSelection}"]`)) {
-        tuningSelect.value = nextSelection;
-    } else {
-        tuningSelect.value = "__equal__";
-        handleTuningSelection("__equal__");
+    if (!Array.from(tuningSelect.options).some(option => option.value === activeTuning.id)) {
+        tuningSelect.add(new Option(activeTuning.name, activeTuning.id));
     }
+    tuningSelect.value = activeTuning.id;
 }
 
 async function handleTuningSelection(value) {
-    if (!value || value === DEFAULT_TUNING_ID) {
-        activeTuning = {
-            id: DEFAULT_TUNING_ID,
-            name: "12-TET",
-            table: equalTemperamentTable
-        };
-        applyActiveTuning();
-        if (tuningResetButton) {
-            tuningResetButton.disabled = true;
-        }
-        queueCloudSettingsSave();
-        return;
-    }
-    setTuningStatus("Loading tuning…", false);
+    const request = ++tuningSelectionRequest;
+    const frame = activeKeyframe;
+    const preference = scalaPreference;
+    if (frame) keyframeTuningRequests.set(frame, request);
+    const isCurrentRequest = () => frame
+        ? keyframeTuningRequests.get(frame) === request && arrangementKeyframes.includes(frame)
+        : request === tuningSelectionRequest && !activeKeyframe;
+
+    const isEqual = !value || value === DEFAULT_TUNING_ID;
+    if (!isEqual) setTuningStatus("Loading tuning…", false);
     try {
-        const tuning = await fetchScalaTuning(value);
+        const tuning = isEqual
+            ? { id: DEFAULT_TUNING_ID, name: "12-TET", table: equalTemperamentTable }
+            : await fetchScalaTuning(value);
+        if (!isCurrentRequest()) return;
+        if (frame) {
+            frame.tuning = structuredClone(tuning);
+            frame.settings.tuning_id = tuning.id;
+            frame.settings.scala_preference = preference;
+        }
+        if (frame !== activeKeyframe) return;
         activeTuning = tuning;
         applyActiveTuning();
-        if (tuningResetButton) {
-            tuningResetButton.disabled = false;
-        }
+        if (tuningResetButton) tuningResetButton.disabled = isEqual;
         queueCloudSettingsSave();
     } catch (error) {
+        if (!isCurrentRequest() || frame !== activeKeyframe) return;
         console.error("Failed to load tuning:", error);
-        setTuningStatus(error && error.message ? error.message : "Failed to load tuning.", true);
-        if (tuningSelect) {
-            tuningSelect.value = activeTuning.id;
-        }
-        if (tuningResetButton && activeTuning.id === DEFAULT_TUNING_ID) {
-            tuningResetButton.disabled = true;
-        }
+        setTuningStatus(error?.message || "Failed to load tuning.", true);
+        if (tuningSelect) tuningSelect.value = activeTuning.id;
+        if (tuningResetButton) tuningResetButton.disabled = activeTuning.id === DEFAULT_TUNING_ID;
     }
 }
 
@@ -5812,7 +6692,7 @@ function applyTempoChange() {
     fluidRenderer.setTempoBpm(bpm, baseTempoBpm, currentSongBaseDuration);
     if (currentSong) {
         currentSong.duration = fluidRenderer.songDuration || currentSong.duration;
-        pauseOffset = Math.min(pauseOffset, currentSong.duration || pauseOffset);
+        pauseOffset = Math.min(pauseOffset, getTimelineDuration() || pauseOffset);
         if (!isPlaying) {
             updateProgressUI(pauseOffset);
         }
@@ -5845,7 +6725,7 @@ function updateTrackActivityVisuals(nowSeconds) {
         return;
     }
     const baseDuration = currentSongBaseDuration || currentSong.duration || 1;
-    const ratio = (currentSong.duration && baseDuration) ? (currentSong.duration / baseDuration) : 1;
+    const ratio = (getTimelineDuration() || baseDuration) / baseDuration;
     const windowStart = nowSeconds - METER_WINDOW_SECONDS * 0.6;
     const windowEnd = nowSeconds + METER_WINDOW_SECONDS * 0.4;
     trackVisualState.forEach((state) => {
@@ -6004,6 +6884,7 @@ async function startRecordingSession() {
     previousLoopState = loopToggle.checked;
     loopToggle.checked = false;
     fluidRenderer.setLoopEnabled(false);
+    fluidRenderer.setLoopEnabled(false);
     stopPlayback(false);
     pauseOffset = 0;
     isUserScrubbing = false;
@@ -6073,6 +6954,7 @@ async function startRecordingSession() {
         setStatus("Recording (compressed option not supported). Saving Hi-Q WAV.", false);
     }
     disableControlsForRecording(true);
+    dismissKeyframePrompt();
     recordButton.textContent = "STOP RECORDING";
     recordButton.classList.add("recording");
     recordButton.disabled = false;
@@ -6140,6 +7022,7 @@ async function stopRecordingSession(autoTriggered) {
     }
     const blob = recorder.stop();
     disableControlsForRecording(false);
+    updateKeyframeControls();
     loopToggle.checked = previousLoopState;
     fluidRenderer.setLoopEnabled(loopToggle.checked);
     recordButton.textContent = "RECORD TO DESKTOP";
@@ -6304,7 +7187,7 @@ function buildMidiPayload(source, arrayBuffer) {
     };
 }
 
-async function saveArrangementToLibrary(arrangementName) {
+async function saveArrangementToLibrary(arrangementName, tags = currentMidiSource?.tags || []) {
     if (!currentSong || !currentMidiBuffer) {
         setStatus("Load a MIDI before saving arrangement.", true);
         throw new Error("No MIDI loaded.");
@@ -6323,9 +7206,9 @@ async function saveArrangementToLibrary(arrangementName) {
             pendingArrangementRefresh = null;
             await rebuildTransformedPlayback("Arrangement updated.");
         }
-        const midiToSave = arrangementDirty && transformedMidiBuffer
-            ? transformedMidiBuffer
-            : currentMidiBuffer;
+        const midiToSave = arrangementKeyframes.length > 1
+            ? baseMidiBuffer
+            : (arrangementDirty && transformedMidiBuffer ? transformedMidiBuffer : currentMidiBuffer);
         const savedDisplayName = arrangementName;
         const savedSource = { source_type: "upload", file_name: buildArrangementFileName(arrangementName) };
         const savedRecord = await withTimeout(
@@ -6333,7 +7216,8 @@ async function saveArrangementToLibrary(arrangementName) {
                 midiToSave,
                 savedDisplayName,
                 savedSource,
-                currentSong
+                currentSong,
+                tags
             ),
             CLOUD_SAVE_TIMEOUT_MS,
             "Saving arrangement timed out. Check your Supabase table/policies and try again."
@@ -6353,14 +7237,20 @@ async function saveArrangementToLibrary(arrangementName) {
     }
 }
 
-async function saveLoadedMidiToCloud(arrayBuffer, displayName, source, parsedSong) {
+async function saveLoadedMidiToCloud(arrayBuffer, displayName, source, parsedSong, tags) {
     if (!supabaseClient || !currentSupabaseUser?.id || !arrayBuffer) {
         return;
     }
     const payload = buildMidiPayload(source, arrayBuffer);
     const meta = {
         ...buildMidiMeta(parsedSong, displayName),
-        arrangement_settings: buildArrangementSettingsSnapshot()
+        arrangement_settings: arrangementKeyframes[0]
+            ? structuredClone(arrangementKeyframes[0].settings)
+            : buildArrangementSettingsSnapshot(),
+        broadcast_recipe: buildMidiSettingsDraft(),
+        source_sample_id: currentMidiSource?.sample_id || null,
+        source_folder: currentMidiSource?.folder || includedMidiFolders.get(currentMidiSource?.sample_id) || null,
+        tags: normalizeArrangementTags(tags)
     };
     const { data: existingRows, error: lookupError } = await supabaseClient
         .from("earb_user_midis")
@@ -6422,6 +7312,11 @@ async function loadCloudMidiRecord(record, options = {}) {
     }
     const payload = record.midi_payload;
     const arrangementSettings = record?.midi_meta?.arrangement_settings;
+    const librarySource = {
+        sample_id: record.midi_meta?.source_sample_id || payload.sample_id,
+        folder: record.midi_meta?.source_folder,
+        tags: getArrangementTags(record)
+    };
     const displayName = record.name || payload.file_name || "MIDI file";
     const statusMessage = options.statusMessage || "Saved arrangement restored.";
     if (payload.source_type === "sample" && typeof payload.source_url === "string" && payload.source_url) {
@@ -6433,19 +7328,30 @@ async function loadCloudMidiRecord(record, options = {}) {
         await loadMidiFromBuffer(buffer, displayName, {
             source_type: "sample",
             source_url: payload.source_url,
-            sample_id: payload.sample_id || payload.source_url,
+            ...librarySource,
             file_name: payload.file_name || displayName
         });
     } else if (payload.encoding === "base64" && typeof payload.midi_base64 === "string" && payload.midi_base64) {
         const buffer = base64ToArrayBuffer(payload.midi_base64);
         await loadMidiFromBuffer(buffer, displayName, {
             source_type: "upload",
+            ...librarySource,
             file_name: payload.file_name || displayName
         });
     } else {
         return false;
     }
-    if (arrangementSettings && typeof arrangementSettings === "object") {
+    const savedKeyframes = readSavedKeyframes(
+        record.midi_meta?.broadcast_recipe?.keyframes
+        ?? record.midi_meta?.radio_recipe?.keyframes
+        ?? record.midi_meta?.arrangement_keyframes
+    );
+    if (savedKeyframes.length > 1) {
+        arrangementKeyframes = savedKeyframes;
+        applyKeyframe(arrangementKeyframes[0]);
+        dismissKeyframePrompt();
+        await rebuildTransformedPlayback(statusMessage);
+    } else if (arrangementSettings && typeof arrangementSettings === "object") {
         await applyArrangementSettingsSnapshot(arrangementSettings, {
             statusMessage,
             skipCloudSave: true
@@ -6596,21 +7502,6 @@ async function applyCloudSettings(settings) {
     setAuthStatus(`Signed in as ${currentSupabaseUser?.email || "user"}. Favorites and playlists synced.`, false);
 }
 
-function buildProgramOverrides() {
-    const overrides = [];
-    trackChannels.forEach((channel, trackIndex) => {
-        const program = clampProgram(trackPrograms.get(trackIndex) ?? 0);
-        overrides.push({
-            channel,
-            bank_msb: getTrackBank(trackIndex, channel),
-            bank_lsb: 0,
-            program
-        });
-    });
-    overrides.sort((a, b) => a.channel - b.channel);
-    return overrides;
-}
-
 function buildTrackOverrides() {
     const overrides = [];
     trackChannels.forEach((channel, trackIndex) => {
@@ -6634,10 +7525,13 @@ function serializeCentsArray(values) {
     return values.map(value => Number((Number(value) || 0).toFixed(6)));
 }
 
-function buildRadioTuningRecipe() {
-    const baseTable = Array.isArray(activeTuning.table) ? activeTuning.table : equalTemperamentTable;
-    const effectiveTable = buildEffectiveTuningTable(baseTable, currentMode, currentTranspose);
-    if (activeTuning.id === DEFAULT_TUNING_ID) {
+function buildRadioTuningRecipe(
+    tuning = activeTuning, mode = currentMode, transpose = currentTranspose,
+    archiveSource = activeScalaSource?.label || scalaPreference || "lite"
+) {
+    const baseTable = Array.isArray(tuning.table) ? tuning.table : equalTemperamentTable;
+    const effectiveTable = buildEffectiveTuningTable(baseTable, mode, transpose);
+    if (tuning.id === DEFAULT_TUNING_ID) {
         return {
             source: "equal",
             id: DEFAULT_TUNING_ID,
@@ -6648,43 +7542,66 @@ function buildRadioTuningRecipe() {
     }
     return {
         source: "embedded_scala",
-        archive_source: activeScalaSource?.label || scalaPreference || "lite",
-        id: activeTuning.id,
-        name: activeTuning.name || activeTuning.id.split("/").pop(),
+        archive_source: archiveSource,
+        id: tuning.id,
+        name: tuning.name || tuning.id.split("/").pop(),
         base_note: BASE_TUNING_NOTE,
-        scale_cents: serializeCentsArray(activeTuning.scaleCents),
-        scala_text: typeof activeTuning.scalaText === "string" ? activeTuning.scalaText : null,
+        scale_cents: serializeCentsArray(tuning.scaleCents),
+        scala_text: typeof tuning.scalaText === "string" ? tuning.scalaText : null,
         effective_table_cents: serializeCentsArray(effectiveTable)
     };
 }
 
+function buildRadioKeyframes(frames, baseBpm) {
+    return frames.map(frame => {
+        const { settings, tuning } = frame;
+        return {
+            ...structuredClone(frame),
+            bpm: clampTempoBpm(baseBpm * clampTempoPercent(settings.tempo_percent) / 100),
+            effective_table_cents: serializeCentsArray(
+                buildEffectiveTuningTable(tuning.table, settings.mode, settings.transpose_semitones)
+            )
+        };
+    });
+}
+
 function buildMidiSettingsDraft() {
-    if (!currentSong || !baseMidiBuffer) {
-        return null;
-    }
+    if (!currentSong || !baseMidiBuffer) return null;
+    const initialFrame = arrangementKeyframes.length > 1 ? arrangementKeyframes[0] : null;
+    const settings = initialFrame?.settings || buildArrangementSettingsSnapshot();
+    const trackOverrides = settings.track_overrides;
+    const programOverrides = trackOverrides.map(({ channel, bank_msb, program }) => ({
+        channel, bank_msb, bank_lsb: 0, program
+    })).sort((a, b) => a.channel - b.channel);
+    const recipe = createMidiSettingsDraft({
+        name: currentSong.displayName || currentSong.name || "midi",
+        byteLength: baseMidiBuffer.byteLength,
+        tuning: buildRadioTuningRecipe(initialFrame?.tuning || activeTuning, settings.mode, settings.transpose_semitones),
+        mode: settings.mode,
+        transpose: settings.transpose_semitones,
+        bpm: tempoPercentToBpm(settings.tempo_percent),
+        programOverrides,
+        trackOverrides
+    });
+    return {
+        ...recipe,
+        midi: { ...recipe.midi, duration_ticks: currentSong.durationTicks },
+        ...(initialFrame ? { keyframes: buildRadioKeyframes(arrangementKeyframes, baseTempoBpm) } : {}),
+        midi_voice_bank_mode: "xg"
+    };
+}
+
+function createMidiSettingsDraft({ name, byteLength, tuning, mode, transpose, bpm, programOverrides, trackOverrides }) {
     return {
         schema_version: 1,
-        midi: {
-            source: "local",
-            name: currentSong.displayName || currentSong.name || "midi",
-            byte_length: baseMidiBuffer.byteLength,
-            sha256: null
-        },
-        tuning: buildRadioTuningRecipe(),
-        mode: currentMode,
-        transpose_semitones: currentTranspose,
-        tempo: {
-            type: "bpm_override",
-            bpm: currentTempoBpm
-        },
-        gm_program_overrides: buildProgramOverrides(),
-        track_overrides: buildTrackOverrides(),
-        output: {
-            codec: "mp3",
-            bitrate_kbps: 192,
-            target_lufs: -16,
-            true_peak_db: -1.0
-        }
+        midi: { source: "local", name, byte_length: byteLength, sha256: null },
+        tuning,
+        mode,
+        transpose_semitones: transpose,
+        tempo: { type: "bpm_override", bpm },
+        gm_program_overrides: programOverrides,
+        track_overrides: trackOverrides,
+        output: { codec: "mp3", bitrate_kbps: 192, target_lufs: -16, true_peak_db: -1.0 }
     };
 }
 

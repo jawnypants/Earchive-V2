@@ -126,11 +126,9 @@
                 const instrumentNumber = Number.isFinite(track.program)
                     ? track.program
                     : Number.isFinite(track?.instrument?.number) ? track.instrument.number : 0;
-                const instrument = channel === 9
-                    ? "Percussion"
-                    : (typeof track.instrumentName === "string" && track.instrumentName.trim()
-                        ? track.instrumentName.trim()
-                        : getInstrumentName(instrumentNumber));
+                const instrument = typeof track.instrumentName === "string" && track.instrumentName.trim()
+                    ? track.instrumentName.trim()
+                    : (channel === 9 ? "Percussion Set" : getInstrumentName(instrumentNumber));
                 const plural = noteCount === 1 ? "" : "s";
                 const trackNumber = Number.isFinite(track.index) ? track.index + 1 : index + 1;
                 const channelLabel = Number.isFinite(channel) ? `, Ch ${channel + 1}` : "";
