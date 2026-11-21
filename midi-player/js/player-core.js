@@ -34,6 +34,7 @@
             this.totalTicks = 0;
             this.isRendering = false;
             this.onPlaybackComplete = null;
+            this.onPlaybackLoop = null;
             this.onPlaybackPosition = null;
             this.channelPrograms = new Map();
             this.loopEnabled = false;
@@ -281,12 +282,7 @@
             if (!this.playerPtr) {
                 throw new Error("No MIDI data loaded.");
             }
-            this._fluid_player_stop(this.playerPtr);
-            this.waitForPlayerStop();
-            this._fluid_player_set_loop(this.playerPtr, 0);
-            this.refreshTotalTicks();
-            const tickPosition = this.secondsToTicks(offsetSeconds);
-            this._fluid_player_seek(this.playerPtr, tickPosition);
+            const tickPosition = this.seekPlayer(offsetSeconds);
             this._applyTempo(this.currentBpm || this.baseBpm || this.defaultTempoBpm);
             this._applyStoredTuning();
             this._fluid_player_play(this.playerPtr);
@@ -332,9 +328,7 @@
 
         stop() {
             if (this.playerPtr) {
-                this._fluid_player_stop(this.playerPtr);
-                this._fluid_player_seek(this.playerPtr, 0);
-                this.waitForPlayerStop();
+                this.seekPlayer(0);
                 this._sendBpmToPlayer();
                 this.silence();
             }
@@ -347,17 +341,27 @@
             if (!this.playerPtr) {
                 return;
             }
-            this._fluid_player_stop(this.playerPtr);
-            this.waitForPlayerStop();
-            this._fluid_player_set_loop(this.playerPtr, 0);
-            this.refreshTotalTicks();
-            const tickPosition = this.secondsToTicks(seconds);
-            this._fluid_player_seek(this.playerPtr, tickPosition);
+            this.seekPlayer(seconds);
             this._sendBpmToPlayer();
             this._applyStoredTuning();
             this.applyProgramSnapshot();
             this.isRendering = false;
             this.resetAudioQueue();
+        }
+
+        seekPlayer(seconds) {
+            // A newly loaded player accepts nonzero seeks while it is READY.
+            // Stopping it first makes FluidSynth reject the seek until it has played.
+            if (this._fluid_player_get_status(this.playerPtr) !== FluidSynthRenderer.PLAYER_READY) {
+                this._fluid_player_stop(this.playerPtr);
+                this.waitForPlayerStop();
+            }
+            this._fluid_player_set_loop(this.playerPtr, 0);
+            const tick = this.secondsToTicks(seconds);
+            if (this._fluid_player_seek(this.playerPtr, tick) !== 0) {
+                throw new Error("Could not seek to that position in the MIDI file.");
+            }
+            return tick;
         }
 
         setLoopEnabled(flag) {
@@ -621,14 +625,22 @@
                 };
             }
             this.ensureHeapViews(frames);
-            if (this.onPlaybackPosition) {
-                // FluidSynth processes MIDI in blocks of 64 samples. Check for
-                // a keyframe between blocks, including inside a worklet buffer.
+            if (this.onPlaybackPosition || this.loopEnabled) {
+                // Check the MIDI position between FluidSynth's 64-sample blocks
+                // so a loop can rewind within the current worklet buffer.
                 for (let offset = 0; offset < frames; offset += 64) {
                     const length = Math.min(64, frames - offset);
                     this._fluid_synth_write_float(this.synthPtr, length,
                         this.leftPtr, offset, 1, this.rightPtr, offset, 1);
-                    this.onPlaybackPosition(this.getCurrentSeconds(), length / this.audioContext.sampleRate);
+                    const tick = this._fluid_player_get_current_tick(this.playerPtr);
+                    if (this.loopEnabled && tick >= this.totalTicks) this.refreshTotalTicks();
+                    if (this.loopEnabled && this.totalTicks > 0 && tick >= this.totalTicks
+                        && this._fluid_player_seek(this.playerPtr, 0) === 0) {
+                        this.playbackStartTick = 0;
+                        this.onPlaybackLoop?.();
+                    } else if (this.onPlaybackPosition) {
+                        this.onPlaybackPosition(this.ticksToSeconds(tick), length / this.audioContext.sampleRate);
+                    }
                 }
             } else {
                 this._fluid_synth_write_float(this.synthPtr, frames,
@@ -740,6 +752,7 @@
         }
     }
 
+    FluidSynthRenderer.PLAYER_READY = 0;
     FluidSynthRenderer.PLAYER_DONE = 3;
     FluidSynthRenderer.TEMPO_EXTERNAL = 1;
 

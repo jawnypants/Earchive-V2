@@ -17,6 +17,7 @@ const saveArrangementButton = document.getElementById("save-arrangement");
 const loadSampleButton = document.getElementById("load-sample");
 const sampleMidiSelect = document.getElementById("sample-midi-select");
 const sampleFolderSelect = document.getElementById("sample-folder-select");
+const rewindButton = document.getElementById("rewind");
 const playButton = document.getElementById("play");
 const pauseButton = document.getElementById("pause");
 const stopButton = document.getElementById("stop");
@@ -32,7 +33,6 @@ const keyframeStatus = document.getElementById("keyframe-status");
 let arrangementKeyframes = [];
 let activeKeyframe = null;
 let keyframeCandidate = null;
-let loopRestartTimer = null;
 let playbackRequest = 0;
 let tuningSelectionRequest = 0;
 const keyframeTuningRequests = new WeakMap();
@@ -56,14 +56,12 @@ const sampleModal = document.getElementById("sample-modal");
 const sampleChooseButton = document.getElementById("sample-choose");
 const sampleCancelButton = document.getElementById("sample-cancel");
 const PROGRESS_MIN_INTERVAL_MS = 80;
-const LOOP_DELAY_MS = 3000;
 const helpToggle = document.getElementById("help-toggle");
-const helpBubbles = document.getElementById("help-bubbles");
-const helpDismiss = document.getElementById("help-dismiss");
-const HELP_SEEN_KEY = "ear_help_seen_v1";
+const controlHelpBubble = document.getElementById("control-help-bubble");
+let helpEnabled = false;
+let helpTarget = null;
 const infoToggle = document.getElementById("info-toggle");
 const infoBubbles = document.getElementById("info-bubbles");
-const infoDismiss = document.getElementById("info-dismiss");
 const contactForm = document.getElementById("contact-form");
 const contactStatus = document.getElementById("contact-status");
 const contactName = document.getElementById("contact-name");
@@ -127,9 +125,6 @@ const recomposerNewsBody = document.getElementById("recomposer-news-body");
 let stationOperatorId = null;
 let recomposerNewsRequest = 0;
 const pageViews = Array.from(document.querySelectorAll("[data-page-view]"));
-const librarianSaveCurrentButton = document.getElementById("librarian-save-current");
-const librarianImportButton = document.getElementById("librarian-import");
-const librarianLoadCloudButton = document.getElementById("librarian-load-cloud");
 const librarianPlayButton = document.getElementById("librarian-play");
 const librarianPauseButton = document.getElementById("librarian-pause");
 const librarianStopButton = document.getElementById("librarian-stop");
@@ -285,6 +280,7 @@ let radiographStatusUrl = "";
 let radiographRecipeUrl = "";
 let radiographHls = null;
 let radiographStatusTimer = null;
+let radiographCountdownTimer = null;
 let radiographRecoveryTimer = null;
 let radiographAudioContext = null;
 let radiographAnalyser = null;
@@ -818,20 +814,33 @@ function renderRadiographStationStatus(status) {
             ? now.track_title || currentTrack?.title || formatRadioTrackName(currentFile)
             : "Waiting for station status";
     }
-    if (radiographNowMeta) {
-        const nextTitle = status?.upcoming?.[0]?.title || formatRadioTrackName(now.next_up);
-        const next = now.next_up ? `Next: ${nextTitle}` : "Next track pending";
-        const creator = currentRadiographCreatorName ? `By ${currentRadiographCreatorName} - ` : "";
-        radiographNowMeta.textContent = currentFile
-            ? `${creator}${formatRadioTimeRemaining(now)} - ${next}`
-            : "The live stream can play before metadata is available.";
-    }
     if (radiographRotationRank) {
         const index = tracks.findIndex(track => (typeof track === "string" ? track : track?.file) === currentFile);
         radiographRotationRank.textContent = index >= 0 ? `Rotation #${index + 1}` : "Rotation sync";
     }
     renderRadiographQueue(status);
+    updateRadiographCountdown();
     renderRadiographPublishedSongs();
+}
+
+function updateRadiographCountdown() {
+    const status = radiographLatestStationStatus;
+    const now = status?.now_playing;
+    const countdown = formatRadioTimeRemaining(now);
+    if (radiographNowMeta) {
+        const nextTitle = status?.upcoming?.[0]?.title || formatRadioTrackName(now?.next_up);
+        const next = now?.next_up ? `Next: ${nextTitle}` : "Next track pending";
+        const creator = currentRadiographCreatorName ? `By ${currentRadiographCreatorName} - ` : "";
+        const text = now?.title
+            ? `${creator}${countdown} - ${next}`
+            : "The live stream can play before metadata is available.";
+        if (radiographNowMeta.textContent !== text) radiographNowMeta.textContent = text;
+    }
+    const currentQueueMeta = radiographQueueList?.querySelector(".is-active .radiograph-queue-meta");
+    if (now?.title && currentQueueMeta) {
+        const text = `Playing now - ${countdown}`;
+        if (currentQueueMeta.textContent !== text) currentQueueMeta.textContent = text;
+    }
 }
 
 function updateRadiographRatingButtons() {
@@ -1047,6 +1056,8 @@ function startRadiographStatusPolling() {
     radiographRecipeUrl = configuredRecipe || derivedRecipe;
     refreshRadiographStationStatus();
     radiographStatusTimer = setInterval(refreshRadiographStationStatus, 15000);
+    clearInterval(radiographCountdownTimer);
+    radiographCountdownTimer = setInterval(updateRadiographCountdown, 1000);
 }
 
 function getRadiographLeaderboardMode() {
@@ -1710,6 +1721,7 @@ function setActivePlaylist(playlistId) {
     }
     if (loopToggle) {
         loopToggle.checked = true;
+        fluidRenderer.setLoopEnabled(true);
     }
     renderLibrarianPlaylists();
     renderLibrarianQueue();
@@ -2380,6 +2392,7 @@ function isTextEntryTarget(target) {
 }
 
 function handleGlobalPlaybackKeys(event) {
+    if (infoBubbles.open || (event.target instanceof Element && event.target.closest("#info-toggle, #help-toggle, #rewind, .track-mix__button"))) return;
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || isTextEntryTarget(event.target)) {
         return;
     }
@@ -2463,35 +2476,6 @@ if (queueShuffleToggleButton) {
 }
 
 document.addEventListener("keydown", handleGlobalPlaybackKeys);
-
-if (librarianImportButton) {
-    librarianImportButton.addEventListener("click", () => {
-        showSampleModal();
-    });
-}
-
-if (librarianLoadCloudButton) {
-    librarianLoadCloudButton.addEventListener("click", () => {
-        openArrangementsModal();
-    });
-}
-
-if (librarianSaveCurrentButton) {
-    librarianSaveCurrentButton.addEventListener("click", () => {
-        if (!currentSong || !currentMidiBuffer) {
-            setLibrarianStatus("Load a MIDI before saving it to the Librarian.", true);
-            setActivePage("recomposer");
-            setStatus("Load a MIDI before saving arrangement.", true);
-            return;
-        }
-        if (!currentSupabaseUser?.id) {
-            setLibrarianStatus("Sign in to save this composition to your cloud library.", true);
-            showAuthModal();
-            return;
-        }
-        showSaveArrangementModal(currentSong.displayName || "Saved composition");
-    });
-}
 
 if (librarianPlayButton) {
     librarianPlayButton.addEventListener("click", () => {
@@ -3661,8 +3645,8 @@ async function applyArrangementSettingsSnapshot(snapshot, options = {}) {
         trackTransposes.clear();
         playableTracks.forEach((track) => {
             const slot = track.slot;
-            trackPrograms.set(slot, 0);
-            trackBanks.set(slot, getDefaultTrackBank(track));
+            trackPrograms.set(slot, track.program);
+            trackBanks.set(slot, track.bank);
             trackVolumes.set(slot, 1);
             trackTransposes.set(slot, 0);
         });
@@ -3673,10 +3657,11 @@ async function applyArrangementSettingsSnapshot(snapshot, options = {}) {
                 return;
             }
             const channel = trackChannels.get(trackIndex) ?? 0;
-            trackPrograms.set(trackIndex, clampProgram(override.program ?? 0));
+            const program = clampProgram(override.program ?? trackPrograms.get(trackIndex));
+            trackPrograms.set(trackIndex, program);
             trackBanks.set(
                 trackIndex,
-                Number.isFinite(override.bank_msb) ? Number(override.bank_msb) : getDefaultBankForChannel(channel)
+                Number.isFinite(override.bank_msb) ? override.bank_msb : getTrackBank(trackIndex, channel)
             );
             trackVolumes.set(trackIndex, clampTrackVolume(Number(override.volume)));
             trackTransposes.set(
@@ -3685,7 +3670,7 @@ async function applyArrangementSettingsSnapshot(snapshot, options = {}) {
             );
             const snapshotEntry = channelAssignmentsSnapshot.find(entry => entry.trackIndex === trackIndex);
             if (snapshotEntry) {
-                snapshotEntry.program = clampProgram(override.program ?? snapshotEntry.program);
+                snapshotEntry.program = program;
                 snapshotEntry.bank = getTrackBank(trackIndex, channel);
             }
         });
@@ -3719,6 +3704,10 @@ function getDefaultBankForChannel(channel) {
 
 function getDefaultTrackBank(track) {
     return (track.index ?? track.slot) === 9 ? GM_PERCUSSION_BANK : GM_MELODIC_BANK;
+}
+
+function getPercussionProgramName(program) {
+    return program ? `Percussion Set (program ${program})` : "Percussion Set";
 }
 
 function getTrackBank(trackIndex, channel = trackChannels.get(trackIndex) ?? 0) {
@@ -3949,7 +3938,7 @@ function applyAllProgramOverrides() {
     }
     trackPrograms.forEach((program, trackIndex) => {
         const channel = trackChannels.get(trackIndex);
-        if (Number.isFinite(channel)) {
+        if (Number.isFinite(channel) && (!sharedTrackChannels.has(channel) || isTrackAudible(trackIndex))) {
             fluidRenderer.programChange(channel, clampProgram(program), getTrackBank(trackIndex, channel));
         }
     });
@@ -3957,18 +3946,26 @@ function applyAllProgramOverrides() {
     logProgramAssignments("applyAllProgramOverrides");
 }
 
+function isTrackAudible(slot) {
+    return !mutedTracks.has(slot) && (!soloedTracks.size || soloedTracks.has(slot));
+}
+
 function applyAllChannelVolumes() {
     if (!fluidRenderer || typeof fluidRenderer.setChannelVolume !== "function") {
         return;
     }
-    trackChannels.forEach((channel, trackIndex) => {
-        if (!Number.isFinite(channel)) {
-            return;
+    const channelVolumes = new Map();
+    trackChannels.forEach((channel, slot) => {
+        if (isTrackAudible(slot)) {
+            channelVolumes.set(channel, clampTrackVolume(trackVolumes.get(slot) ?? 1));
+        } else if (!channelVolumes.has(channel)) {
+            channelVolumes.set(channel, 0);
         }
-        const volume = clampTrackVolume(trackVolumes.get(trackIndex) ?? 1);
+    });
+    channelVolumes.forEach((volume, channel) => {
         fluidRenderer.setChannelVolume(channel, volume * 127);
         if (typeof fluidRenderer.setChannelExpression === "function") {
-            fluidRenderer.setChannelExpression(channel, 127);
+            fluidRenderer.setChannelExpression(channel, volume === 0 ? 0 : 127);
         }
     });
 }
@@ -4025,39 +4022,13 @@ function followPlaybackKeyframes(seconds, untilNextBlock) {
     const frame = keyframeAt((seconds + untilNextBlock) / fluidRenderer.songDuration);
     if (frame && frame.position > activeKeyframe.position) applyKeyframe(frame);
 }
+fluidRenderer.onPlaybackLoop = () => {
+    prepareKeyframesForPlayback(0);
+    playbackStartTime = getAudioContext().currentTime;
+    if (!isUserScrubbing) updateProgressUI(0);
+};
 fluidRenderer.onPlaybackComplete = async () => {
-    if (recordingActive) {
-        await stopRecordingSession(true);
-        stopPlayback(true);
-        return;
-    }
-    if (loopToggle.checked && currentSong) {
-        isPlaying = false;
-        pauseOffset = 0;
-        playbackStartTime = getAudioContext().currentTime;
-        isUserScrubbing = false;
-        stopProgressUpdates(true);
-        applyTempoChange();
-        fluidRenderer.reapplyTuning();
-        setStatus("Looping in 3s...", false);
-        loopRestartTimer = setTimeout(async () => {
-            loopRestartTimer = null;
-            if (!loopToggle.checked || !currentSong) {
-                return;
-            }
-            applyAllProgramOverrides();
-            const scheduled = await scheduleNotesFromOffset(0);
-            if (scheduled) {
-                isPlaying = true;
-                startProgressUpdates();
-                setStatus("Playing...", false);
-                logProgramAssignments("loop restart");
-                return;
-            }
-            stopPlayback(true);
-        }, LOOP_DELAY_MS);
-        return;
-    }
+    if (recordingActive) await stopRecordingSession(true);
     stopPlayback(true);
 };
 
@@ -4068,7 +4039,7 @@ let latestSelectionToken = 0;
 
 if (typeof Worker !== "undefined") {
     try {
-        midiWorker = new Worker("js/midi-worker.js");
+        midiWorker = new Worker("js/midi-worker.js?v=2");
     } catch (error) {
         console.warn("Falling back to main-thread MIDI parsing:", error);
         midiWorker = null;
@@ -4082,6 +4053,9 @@ let playableTracks = [];
 let trackPrograms = new Map();
 let trackBanks = new Map();
 let trackVolumes = new Map();
+const sharedTrackChannels = new Set();
+const mutedTracks = new Set();
+const soloedTracks = new Set();
 let trackTransposes = new Map();
 let currentMidiBuffer = null;
 let currentMidiSource = null;
@@ -4196,28 +4170,37 @@ if (sampleCancelButton) {
         setStatus("Sample load canceled.", false);
     });
 }
-if (helpToggle) {
-    helpToggle.addEventListener("click", () => {
-        const isHidden = helpBubbles?.classList.contains("is-hidden");
-        setHelpVisibility(Boolean(isHidden), false);
-    });
-}
-if (helpDismiss) {
-    helpDismiss.addEventListener("click", () => {
-        setHelpVisibility(false, true);
-    });
-}
-if (infoToggle) {
-    infoToggle.addEventListener("click", () => {
-        const isHidden = infoBubbles?.classList.contains("is-hidden");
-        setInfoVisibility(Boolean(isHidden));
-    });
-}
-if (infoDismiss) {
-    infoDismiss.addEventListener("click", () => {
-        setInfoVisibility(false);
-    });
-}
+helpToggle.addEventListener("click", () => {
+    helpEnabled = !helpEnabled;
+    helpToggle.setAttribute("aria-pressed", String(helpEnabled));
+    helpToggle.textContent = helpEnabled ? "Hide Help Bubbles" : "Show Help Bubbles";
+    if (!helpEnabled) hideControlHelp();
+});
+
+document.addEventListener("pointerover", event => {
+    if (helpEnabled && event.pointerType !== "touch" && event.target instanceof Element) {
+        showControlHelp(event.target.closest("[data-help]"));
+    }
+});
+document.addEventListener("pointerout", event => {
+    if (helpTarget?.contains(event.target) && !helpTarget.contains(event.relatedTarget)) {
+        hideControlHelp();
+    }
+});
+document.addEventListener("focusin", event => {
+    if (helpEnabled && event.target instanceof Element) showControlHelp(event.target.closest("[data-help]"));
+});
+document.addEventListener("focusout", event => {
+    if (helpTarget?.contains(event.target)) hideControlHelp();
+});
+document.addEventListener("keydown", event => {
+    if (event.key === "Escape") hideControlHelp();
+});
+document.addEventListener("scroll", hideControlHelp, true);
+window.addEventListener("resize", hideControlHelp);
+
+infoToggle.addEventListener("click", () => setInfoVisibility(true));
+infoBubbles.addEventListener("close", () => infoToggle.classList.remove("is-on"));
 if (contactLink) {
     contactLink.addEventListener("click", (event) => {
         event.preventDefault();
@@ -4522,6 +4505,7 @@ if (playlistDeleteModal) {
         }
     });
 }
+rewindButton.addEventListener("click", () => seekRecomposer(0));
 playButton.addEventListener("click", () => {
     play();
     setTimeout(updateQueueTransportControls, 0);
@@ -4536,7 +4520,6 @@ stopButton.addEventListener("click", () => {
 });
 loopToggle.addEventListener("change", () => {
     fluidRenderer.setLoopEnabled(loopToggle.checked);
-    if (!loopToggle.checked) clearTimeout(loopRestartTimer);
 });
 if (recordButton) {
     recordButton.addEventListener("click", () => toggleRecording());
@@ -4552,29 +4535,36 @@ progressBar.addEventListener("input", (event) => {
     updateProgressUI(pauseOffset);
 });
 
-progressBar.addEventListener("change", async () => {
-    if (!currentSong) {
+progressBar.addEventListener("change", () => seekRecomposer(pauseOffset));
+
+async function seekRecomposer(seconds) {
+    if (!currentSong || !isPrepared || recordingActive) {
         return;
     }
-    playbackRequest++;
-    clearTimeout(loopRestartTimer);
-    dismissKeyframePrompt();
-    if (isPlaying) {
-        applyAllProgramOverrides();
-        const success = await scheduleNotesFromOffset(pauseOffset);
-        if (success) {
-            pauseOffset = 0;
-            startProgressUpdates();
-            logProgramAssignments("post-scrub resume");
+    const request = ++playbackRequest;
+    pauseOffset = seconds;
+    try {
+        if (isPlaying) {
+            const success = await scheduleNotesFromOffset(seconds);
+            if (request !== playbackRequest) return;
+            if (success) {
+                pauseOffset = 0;
+                startProgressUpdates();
+            } else {
+                isPlaying = false;
+                stopProgressUpdates(false);
+            }
+        } else {
+            dismissKeyframePrompt();
+            await fluidRenderer.seek(prepareKeyframesForPlayback(seconds));
         }
-    } else {
-        await fluidRenderer.seek(prepareKeyframesForPlayback(pauseOffset));
-        applyAllProgramOverrides();
-        updateProgressUI(pauseOffset);
-        logProgramAssignments("post-scrub paused");
+        if (request === playbackRequest) updateProgressUI(seconds, { overrideScrubLock: true });
+    } catch (error) {
+        if (request === playbackRequest) setStatus(error?.message || "Unable to seek.", true);
+    } finally {
+        if (request === playbackRequest) isUserScrubbing = false;
     }
-    isUserScrubbing = false;
-});
+}
 
 progressBar.addEventListener("pointerdown", () => {
     if (!currentSong) {
@@ -4749,6 +4739,9 @@ async function loadMidiFromBuffer(buffer, displayName = "MIDI file", source = nu
         customTempoActive = false;
         playableTracks = parsedSong.tracks;
         console.log("[MIDI] Loaded. Duration:", currentSong.duration, "Tracks:", playableTracks.length);
+        mutedTracks.clear();
+        soloedTracks.clear();
+        sharedTrackChannels.clear();
         trackChannels.clear();
         trackPrograms.clear();
         trackBanks.clear();
@@ -4768,14 +4761,18 @@ async function loadMidiFromBuffer(buffer, displayName = "MIDI file", source = nu
             if (!Number.isFinite(track.channel)) {
                 console.warn("Track has no MIDI channel. Falling back to channel", channel + 1);
             }
-            if (usedChannels.has(channel) && freeChannels.length) {
-                channel = freeChannels.shift();
+            if (usedChannels.has(channel)) {
+                if (freeChannels.length) {
+                    channel = freeChannels.shift();
+                } else {
+                    sharedTrackChannels.add(channel);
+                }
             }
             usedChannels.add(channel);
             track.channelNumber = channel;
             trackChannels.set(slot, channel);
-            const initialProgram = 0;
-            const initialBank = getDefaultTrackBank(track);
+            const initialProgram = track.program;
+            const initialBank = track.bank;
             trackPrograms.set(slot, initialProgram);
             trackBanks.set(slot, initialBank);
             trackVolumes.set(slot, 1);
@@ -4902,76 +4899,7 @@ async function parseMidiOnMainThread(arrayBuffer) {
         throw new Error("The @tonejs/midi script failed to load.");
     }
     await new Promise((resolve) => setTimeout(resolve, 0));
-    const midi = new Midi(arrayBuffer);
-    return normalizeMidiData(midi);
-}
-
-function normalizeMidiData(midi) {
-    let derivedDuration = 0;
-    const tracks = midi.tracks.map((track, index) => {
-        const instrument = track.instrument || {};
-        const noteChannels = Array.isArray(track.notes)
-            ? track.notes
-                .map(note => Number.isFinite(note?.channel) ? Math.max(0, Math.min(15, Math.round(note.channel))) : null)
-                .filter(channel => channel !== null)
-            : [];
-        const inferredNoteChannel = noteChannels.length
-            ? noteChannels.reduce((counts, channel) => {
-                counts.set(channel, (counts.get(channel) || 0) + 1);
-                return counts;
-            }, new Map())
-            : null;
-        const dominantNoteChannel = inferredNoteChannel
-            ? Array.from(inferredNoteChannel.entries()).sort((a, b) => b[1] - a[1])[0]?.[0]
-            : null;
-        const channel = Number.isFinite(track.channel)
-            ? Math.max(0, Math.min(15, Math.round(track.channel)))
-            : (Number.isFinite(instrument.channel)
-                ? Math.max(0, Math.min(15, Math.round(instrument.channel)))
-                : (Number.isFinite(dominantNoteChannel) ? dominantNoteChannel : index));
-
-        const notes = track.notes
-            .filter(note => Number.isFinite(note.time) && Number.isFinite(note.duration))
-            .map(note => ({
-                time: note.time,
-                duration: note.duration,
-                midi: note.midi,
-                velocity: Number.isFinite(note.velocity) ? note.velocity : 0.8
-            }));
-
-        if (notes.length) {
-            const lastEvent = notes[notes.length - 1];
-            derivedDuration = Math.max(derivedDuration, lastEvent.time + lastEvent.duration);
-        }
-
-        return {
-            index,
-            name: track.name && track.name.trim() ? track.name.trim() : `Track ${index + 1}`,
-            program: clampProgram(instrument.number),
-            instrumentName: instrument.name || "",
-            channel,
-            notes
-        };
-    }).filter(track => track.notes.length > 0);
-
-    const tempos = Array.isArray(midi.header?.tempos)
-        ? midi.header.tempos.map((tempo) => ({
-            bpm: Number.isFinite(tempo.bpm) ? tempo.bpm : null,
-            time: Number.isFinite(tempo.time) ? tempo.time : null
-        })).filter(item => item.bpm !== null && item.time !== null)
-        : [];
-
-    const songDuration = Number.isFinite(midi.duration) && midi.duration > 0
-        ? midi.duration
-        : derivedDuration;
-
-    return {
-        name: midi.name || "",
-        duration: songDuration,
-        durationTicks: midi.durationTicks,
-        tracks,
-        tempos
-    };
+    return normalizeMidiSource(arrayBuffer);
 }
 
 function renderInstrumentMenus() {
@@ -4995,17 +4923,19 @@ function renderInstrumentMenus() {
         meter.appendChild(meterLabel);
 
         const select = document.createElement("select");
+        const bank = getTrackBank(track.slot, channel);
+        const program = trackPrograms.get(track.slot) ?? 0;
         select.appendChild(new Option("Percussion Set", buildInstrumentOptionValue(GM_PERCUSSION_BANK, 0)));
+        if (bank === GM_PERCUSSION_BANK && program !== 0) {
+            select.appendChild(new Option(getPercussionProgramName(program), buildInstrumentOptionValue(bank, program)));
+        }
         GM_INSTRUMENTS.forEach((instrumentName, programNumber) => {
             const option = document.createElement("option");
             option.value = buildInstrumentOptionValue(GM_MELODIC_BANK, programNumber);
             option.textContent = `${programNumber.toString().padStart(3, "0")} - ${instrumentName}`;
             select.appendChild(option);
         });
-        select.value = buildInstrumentOptionValue(
-            getTrackBank(track.slot, channel),
-            trackPrograms.get(track.slot) ?? 0
-        );
+        select.value = buildInstrumentOptionValue(bank, program);
         select.addEventListener("change", () => {
             const nextSelection = parseInstrumentOptionValue(select.value, channel);
             const previousBank = getTrackBank(track.slot);
@@ -5014,7 +4944,9 @@ function renderInstrumentMenus() {
             const assignment = channelAssignmentsSnapshot.find(item => item.trackIndex === track.slot);
             if (assignment) {
                 Object.assign(assignment, nextSelection);
-                fluidRenderer.programChange(assignment.channel, assignment.program, assignment.bank);
+                if (!sharedTrackChannels.has(channel) || isTrackAudible(track.slot)) {
+                    fluidRenderer.programChange(assignment.channel, assignment.program, assignment.bank);
+                }
             }
             setStatus(`Instrument preference stored for ${track.name}`, false);
             updateSongInstrumentSummary();
@@ -5041,29 +4973,15 @@ function renderInstrumentMenus() {
         volumeInput.step = "0.01";
         volumeInput.value = initialVolume.toString();
         volumeInput.style.setProperty("--volume-fill", `${(initialVolume * 100).toFixed(0)}%`);
-        let pendingVolumeRefresh = false;
         volumeInput.addEventListener("input", () => {
             const nextValue = clampTrackVolume(Number(volumeInput.value));
             trackVolumes.set(track.slot, nextValue);
             recordKeyframeTrackSettings(track.slot, { volume: nextValue });
             volumeValue.textContent = formatTrackVolumeLabel(nextValue);
             volumeInput.style.setProperty("--volume-fill", `${(nextValue * 100).toFixed(0)}%`);
-            const channelNumber = trackChannels.get(track.slot);
-            const liveOk = Number.isFinite(channelNumber)
-                && typeof fluidRenderer?.setChannelVolume === "function"
-                && fluidRenderer.setChannelVolume(channelNumber, nextValue * 127);
-            if (!liveOk) {
-                pendingVolumeRefresh = true;
-                setStatus("Live volume not available; change will apply next render.", true);
-            } else {
-                pendingVolumeRefresh = false;
-                applyAllChannelVolumes();
-            }
+            applyAllChannelVolumes();
         });
-        volumeInput.addEventListener("change", () => {
-            pendingVolumeRefresh = false;
-            queueCloudSettingsSave();
-        });
+        volumeInput.addEventListener("change", queueCloudSettingsSave);
         volumeWrap.appendChild(volumeInput);
         volumeWrap.appendChild(volumeLabel);
         volumeWrap.appendChild(volumeValue);
@@ -5124,6 +5042,38 @@ function renderInstrumentMenus() {
             level: 0
         });
 
+        const mixControls = document.createElement("div");
+        mixControls.className = "track-mix";
+        const mixActions = [
+            { label: "Mute", tracks: mutedTracks, help: "Silence this track without changing its volume." },
+            { label: "Solo", tracks: soloedTracks, help: "Play only the soloed tracks. Mute still applies." }
+        ];
+        for (const { label, tracks, help } of mixActions) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `track-mix__button track-mix__button--${label.toLowerCase()}`;
+            button.textContent = label;
+            button.setAttribute("aria-label", `${label} ${track.name} (Track ${trackLabelNumber})`);
+            button.setAttribute("aria-pressed", String(tracks.has(track.slot)));
+            button.dataset.help = help;
+            button.addEventListener("click", () => {
+                const previouslySilenced = getSilencedSharedTracks();
+                if (!tracks.delete(track.slot)) tracks.add(track.slot);
+                button.setAttribute("aria-pressed", String(tracks.has(track.slot)));
+                applyAllChannelVolumes();
+                updateTrackActivityVisuals(isPlaying ? getElapsedPlaybackSeconds() : pauseOffset);
+                const silenced = getSilencedSharedTracks();
+                if (silenced.size !== previouslySilenced.size
+                    || [...silenced].some(slot => !previouslySilenced.has(slot))) {
+                    scheduleArrangementRefresh("Track mix updated.", { mixOnly: true });
+                }
+            });
+            mixControls.appendChild(button);
+        }
+        const trackTools = document.createElement("div");
+        trackTools.className = "track-stack";
+        trackTools.append(transposeWrap, mixControls);
+
         const controlRow = document.createElement("div");
         controlRow.className = "track-controls";
         const controlStack = document.createElement("div");
@@ -5132,7 +5082,7 @@ function renderInstrumentMenus() {
         controlStack.appendChild(select);
         controlStack.appendChild(volumeWrap);
         controlRow.appendChild(controlStack);
-        controlRow.appendChild(transposeWrap);
+        controlRow.appendChild(trackTools);
         card.appendChild(controlRow);
         instrumentGrid.appendChild(card);
     });
@@ -5146,7 +5096,7 @@ function updateSongInstrumentSummary() {
             ...track,
             channel: trackChannels.get(track.slot),
             instrumentName: getTrackBank(track.slot) === GM_PERCUSSION_BANK
-                ? "Percussion Set"
+                ? getPercussionProgramName(trackPrograms.get(track.slot))
                 : getInstrumentName(trackPrograms.get(track.slot))
         }))
     });
@@ -5213,7 +5163,6 @@ function stopPlayback(autoTriggered) {
         return;
     }
     playbackRequest++;
-    clearTimeout(loopRestartTimer);
     isPlaying = false;
     pauseOffset = 0;
     playbackStartTime = 0;
@@ -5360,14 +5309,17 @@ function dismissKeyframePrompt() {
 }
 
 async function editKeyframeAt(position) {
-    clearTimeout(loopRestartTimer);
     if (!isPrepared || recordingActive) return;
     pausePlayback();
     keyframeCandidate = position;
     pauseOffset = position * getTimelineDuration();
-    await fluidRenderer.seek(prepareKeyframesForPlayback(pauseOffset));
-    updateProgressUI(pauseOffset, { overrideScrubLock: true });
-    updateKeyframeControls();
+    try {
+        await fluidRenderer.seek(prepareKeyframesForPlayback(pauseOffset));
+        updateProgressUI(pauseOffset, { overrideScrubLock: true });
+        updateKeyframeControls();
+    } catch (error) {
+        setStatus(error?.message || "Unable to seek to the keyframe.", true);
+    }
 }
 
 keyframePlace.addEventListener("click", event => {
@@ -5395,15 +5347,14 @@ keyframeConfirm.addEventListener("change", async () => {
     }
     pauseOffset = position * getTimelineDuration();
     renderKeyframeLane();
-    clearTimeout(pendingArrangementRefresh);
+    clearTimeout(pendingArrangementRefresh?.timer);
     pendingArrangementRefresh = null;
     await rebuildTransformedPlayback("Keyframes updated.");
 });
 
 function resetPlaybackState() {
     playbackRequest++;
-    clearTimeout(loopRestartTimer);
-    clearTimeout(pendingArrangementRefresh);
+    clearTimeout(pendingArrangementRefresh?.timer);
     pendingArrangementRefresh = null;
     arrangementKeyframes = [];
     activeKeyframe = null;
@@ -5417,6 +5368,7 @@ function resetPlaybackState() {
 }
 
 function enableTransportButtons(enabled) {
+    rewindButton.disabled = !enabled;
     playButton.disabled = !enabled;
     pauseButton.disabled = !enabled;
     stopButton.disabled = !enabled;
@@ -5520,8 +5472,7 @@ function setLoadButtonEnabled(enabled) {
         return;
     }
     fileInput.disabled = !enabled;
-    loadButton.classList.toggle("is-disabled", !enabled);
-    loadButton.setAttribute("aria-disabled", enabled ? "false" : "true");
+    loadButton.disabled = !enabled;
 }
 
 setLoadButtonEnabled(false);
@@ -5634,36 +5585,47 @@ function populateSampleMidiSelect(manifest = SAMPLE_MIDIS) {
     }
 }
 
-function setHelpVisibility(show, markSeen) {
-    if (!helpBubbles) return;
-    helpBubbles.classList.toggle("is-hidden", !show);
-    helpBubbles.classList.toggle("is-shown", show);
-    if (helpToggle) {
-        helpToggle.classList.toggle("is-on", Boolean(show));
+function hideControlHelp() {
+    if (!helpTarget) return;
+    const descriptions = (helpTarget.getAttribute("aria-describedby") || "").split(/\s+/)
+        .filter(id => id && id !== controlHelpBubble.id);
+    if (descriptions.length) {
+        helpTarget.setAttribute("aria-describedby", descriptions.join(" "));
+    } else {
+        helpTarget.removeAttribute("aria-describedby");
     }
-    if (markSeen) {
-        try {
-            localStorage.setItem(HELP_SEEN_KEY, "1");
-        } catch (_) {
-            // ignore
-        }
-    }
+    helpTarget = null;
+    controlHelpBubble.hidden = true;
+}
+
+function showControlHelp(target) {
+    if (target === helpTarget) return;
+    hideControlHelp();
+    if (!target?.dataset.help) return;
+    helpTarget = target;
+    controlHelpBubble.textContent = target.dataset.help;
+    controlHelpBubble.hidden = false;
+    const description = target.getAttribute("aria-describedby");
+    target.setAttribute("aria-describedby", [description, controlHelpBubble.id].filter(Boolean).join(" "));
+
+    const control = target.getBoundingClientRect();
+    const bubble = controlHelpBubble.getBoundingClientRect();
+    const inset = 8;
+    const left = Math.max(inset, Math.min(control.left, window.innerWidth - bubble.width - inset));
+    const top = control.bottom + bubble.height + 2 * inset <= window.innerHeight
+        ? control.bottom + inset
+        : Math.max(inset, control.top - bubble.height - inset);
+    controlHelpBubble.style.left = `${left}px`;
+    controlHelpBubble.style.top = `${top}px`;
 }
 
 function setInfoVisibility(show) {
-    if (!infoBubbles) return;
-    infoBubbles.classList.toggle("is-hidden", !show);
-    infoBubbles.classList.toggle("is-shown", show);
-}
-
-// Show tips on first visit.
-try {
-    const seen = localStorage.getItem(HELP_SEEN_KEY);
-    if (!seen) {
-        setTimeout(() => setHelpVisibility(true, true), 300);
+    if (show && !infoBubbles.open) {
+        infoBubbles.showModal();
+        infoToggle.classList.add("is-on");
+    } else if (!show && infoBubbles.open) {
+        infoBubbles.close();
     }
-} catch (_) {
-    // ignore
 }
 
 async function loadSampleByRecord(sample) {
@@ -5725,6 +5687,9 @@ function handleLoadFailure() {
     transformedMidiBuffer = null;
     arrangementDirty = false;
     playableTracks = [];
+    mutedTracks.clear();
+    soloedTracks.clear();
+    sharedTrackChannels.clear();
     trackPrograms.clear();
     trackBanks.clear();
     trackChannels.clear();
@@ -5807,7 +5772,6 @@ function playConfirmationClick() {
 
 async function scheduleNotesFromOffset(offsetSeconds) {
     try {
-        clearTimeout(loopRestartTimer);
         dismissKeyframePrompt();
         await fluidRenderer.playFrom(prepareKeyframesForPlayback(offsetSeconds));
         const ctx = getAudioContext();
@@ -6007,6 +5971,7 @@ function applyAllChannelTunings(baseTable, forceApply = false) {
     }
     const table = Array.isArray(baseTable) ? baseTable : equalTemperamentTable;
     trackChannels.forEach((channel, trackIndex) => {
+        if (sharedTrackChannels.has(channel) && !isTrackAudible(trackIndex)) return;
         const trackTranspose = trackTransposes.get(trackIndex) ?? 0;
         const channelTable = buildShiftedTuningTable(table, trackTranspose);
         if (typeof fluidRenderer.applyTuningForChannel === "function") {
@@ -6036,7 +6001,7 @@ function capturePlaybackState() {
     return { wasPlaying, resumePoint };
 }
 
-async function rebuildTransformedPlayback(message) {
+async function rebuildTransformedPlayback(message, { mixOnly = false } = {}) {
     if (!baseMidiBuffer || !channelAssignmentsSnapshot.length) {
         return;
     }
@@ -6044,10 +6009,16 @@ async function rebuildTransformedPlayback(message) {
     setStatus("Updating arrangement...", false);
     const state = capturePlaybackState();
     try {
-        transformedMidiBuffer = buildTransformedMidiBuffer(baseMidiBuffer);
-        arrangementDirty = true;
+        const playbackMidi = buildTransformedMidiBuffer(baseMidiBuffer);
+        if (!mixOnly) {
+            transformedMidiBuffer = playbackMidi;
+            arrangementDirty = true;
+        }
         await fluidRenderer.loadMidi(
-            encodeMidiVoices(transformedMidiBuffer),
+            encodeMidiVoices(playbackMidi, null, {
+                silencedTracks: getSilencedSharedTracks(),
+                durationTicks: currentSong.durationTicks
+            }),
             currentSongBaseDuration,
             channelAssignmentsSnapshot,
             tempoSnapshot
@@ -6088,14 +6059,23 @@ async function rebuildTransformedPlayback(message) {
     }
 }
 
-function scheduleArrangementRefresh(label) {
+function scheduleArrangementRefresh(label, { mixOnly = false } = {}) {
     if (pendingArrangementRefresh) {
+        if (!mixOnly) {
+            pendingArrangementRefresh.mixOnly = false;
+            pendingArrangementRefresh.label = label;
+        }
         return;
     }
-    pendingArrangementRefresh = setTimeout(() => {
-        pendingArrangementRefresh = null;
-        rebuildTransformedPlayback(label || "Arrangement updated");
-    }, 50);
+    pendingArrangementRefresh = {
+        label,
+        mixOnly,
+        timer: setTimeout(() => {
+            const refresh = pendingArrangementRefresh;
+            pendingArrangementRefresh = null;
+            rebuildTransformedPlayback(refresh.label || "Arrangement updated", refresh);
+        }, 50)
+    };
 }
 
 function buildTransformedMidiBuffer(arrayBuffer) {
@@ -6169,7 +6149,28 @@ function buildTransformedMidiBuffer(arrayBuffer) {
     }
 }
 
-function encodeMidiVoices(midi, banks = null) {
+function getSilencedSharedTracks() {
+    const slots = new Set();
+    if (sharedTrackChannels.size) {
+        trackChannels.forEach((channel, slot) => {
+            if (sharedTrackChannels.has(channel) && !isTrackAudible(slot)) slots.add(slot);
+        });
+    }
+    return slots;
+}
+
+function buildSilentMidiTrack(header, ticks) {
+    // Preserve the timeline when a silenced track shares a synth channel.
+    const delta = [ticks & 0x7f];
+    for (ticks >>>= 7; ticks > 0; ticks >>>= 7) {
+        delta.unshift((ticks & 0x7f) | 0x80);
+    }
+    const endOfTrack = Uint8Array.of(...delta, 0xff, 0x2f, 0);
+    new DataView(header.buffer).setUint32(4, endOfTrack.length);
+    return [header, endOfTrack];
+}
+
+function encodeMidiVoices(midi, banks = null, { silencedTracks, durationTicks } = {}) {
     const bytes = new Uint8Array(midi);
     const view = new DataView(bytes.buffer);
     // Tone MIDI writes a conductor track and then starts each instrument track
@@ -6180,6 +6181,12 @@ function encodeMidiVoices(midi, banks = null) {
     for (let offset = conductorEnd, index = 0; offset < bytes.length; index += 1) {
         const start = offset + 8;
         const end = start + view.getUint32(offset + 4);
+        const trackHeader = bytes.slice(offset, start);
+        if (silencedTracks?.has(index)) {
+            chunks.push(...buildSilentMidiTrack(trackHeader, durationTicks));
+            offset = end;
+            continue;
+        }
         let programOffset = start + 3;
         let nameLength = 0;
         let lengthByte;
@@ -6199,7 +6206,6 @@ function encodeMidiVoices(midi, banks = null) {
             0, 0xb0 | channel, 0, banks[index] === GM_PERCUSSION_BANK ? 127 : 0,
             0, 0xb0 | channel, 32, 0
         ) : new Uint8Array(0);
-        const trackHeader = bytes.slice(offset, start);
         new DataView(trackHeader.buffer).setUint32(
             4, end - start - 3 + bankSelect.length + program.length
         );
@@ -6728,8 +6734,14 @@ function updateTrackActivityVisuals(nowSeconds) {
     const ratio = (getTimelineDuration() || baseDuration) / baseDuration;
     const windowStart = nowSeconds - METER_WINDOW_SECONDS * 0.6;
     const windowEnd = nowSeconds + METER_WINDOW_SECONDS * 0.4;
-    trackVisualState.forEach((state) => {
+    trackVisualState.forEach((state, slot) => {
         if (!state?.element || !state?.meterFill) {
+            return;
+        }
+        if (!isTrackAudible(slot)) {
+            state.level = 0;
+            state.element.classList.remove("is-active");
+            state.meterFill.style.transform = "scaleX(0)";
             return;
         }
         const notes = state.notes || [];
@@ -7088,7 +7100,7 @@ async function stopRecordingSession(autoTriggered) {
 
 function disableControlsForRecording(disabled) {
     if (disabled) {
-        [playButton, pauseButton, stopButton, loopToggle, fileInput].forEach(el => {
+        [rewindButton, playButton, pauseButton, stopButton, loopToggle, fileInput].forEach(el => {
             if (el) {
                 el.dataset.wasDisabled = el.disabled ? "1" : "0";
                 el.disabled = true;
@@ -7096,7 +7108,7 @@ function disableControlsForRecording(disabled) {
         });
         progressBar.disabled = true;
     } else {
-        [playButton, pauseButton, stopButton, loopToggle, fileInput].forEach(el => {
+        [rewindButton, playButton, pauseButton, stopButton, loopToggle, fileInput].forEach(el => {
             if (el) {
                 el.disabled = el.dataset.wasDisabled === "1";
                 delete el.dataset.wasDisabled;
@@ -7202,9 +7214,10 @@ async function saveArrangementToLibrary(arrangementName, tags = currentMidiSourc
     }
     try {
         if (pendingArrangementRefresh) {
-            clearTimeout(pendingArrangementRefresh);
+            const refresh = pendingArrangementRefresh;
+            clearTimeout(refresh.timer);
             pendingArrangementRefresh = null;
-            await rebuildTransformedPlayback("Arrangement updated.");
+            await rebuildTransformedPlayback(refresh.label || "Arrangement updated.", refresh);
         }
         const midiToSave = arrangementKeyframes.length > 1
             ? baseMidiBuffer
