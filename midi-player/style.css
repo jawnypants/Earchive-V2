@@ -6,6 +6,7 @@
     --panel: #565c66;
     --panel-border: #7f8792;
     --accent: #ffb000;
+    --help-yellow: #b5a068;
     --accent-dark: #dd8f00;
     --accent-soft: rgba(255, 176, 0, 0.2);
     --shadow: 0 18px 45px rgba(0, 0, 0, 0.08);
@@ -174,19 +175,18 @@ textarea:disabled {
 }
 
 .tabs-auth-row {
-    position: relative;
     width: min(96vw, 1140px);
     margin: 0 auto;
-    display: flex;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: minmax(136px, 1fr) minmax(0, var(--title-core-width)) minmax(136px, 1fr);
+    gap: 8px;
     align-items: start;
     min-height: 38px;
 }
 
 .auth-quick {
-    position: absolute;
-    right: 0;
-    top: 0;
+    justify-self: end;
+    min-width: 0;
     display: flex;
     flex-direction: row;
     gap: 8px;
@@ -194,6 +194,8 @@ textarea:disabled {
 }
 
 #auth-launch {
+    align-self: start;
+    flex-shrink: 0;
     min-width: 62px;
     height: 28px;
     font-size: 0.72rem;
@@ -210,6 +212,7 @@ textarea:disabled {
     color: var(--ink-soft);
     line-height: 1.15;
     max-width: 140px;
+    overflow-wrap: anywhere;
     text-align: right;
 }
 
@@ -222,25 +225,36 @@ textarea:disabled {
     width: fit-content;
 }
 
-.header-audio-controls {
-    display: grid;
-    justify-items: center;
-    gap: 4px;
-    padding: 4px 0;
-}
-
 .help-bubbles-toggle {
-    border-radius: 2px;
-    padding: 4px 7px;
-    background: #444b54;
-    color: #eef1f5;
+    justify-self: start;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    padding: 2px 6px;
+    border: 1px solid #c4b37f;
+    border-radius: 10px;
+    background: var(--help-yellow);
+    color: #ffffff;
+    text-shadow: 0 1px 2px #50421f;
     font-size: 0.68rem;
-    white-space: nowrap;
+    font-weight: 700;
+    line-height: 1.15;
 }
 
-.help-bubbles-toggle[aria-pressed="true"] {
-    background: #d8dde4;
-    color: #2b2f34;
+.help-bubbles-toggle input {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: #785e28;
+    cursor: pointer;
+}
+
+@property --audio-hint-outline {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: #8da3bb;
 }
 
 .audio-launch-hint {
@@ -250,31 +264,34 @@ textarea:disabled {
     transform: translateY(-50%);
     background: #3a4048;
     color: #f2f5f8;
-    border: 2px solid #717a87;
-    border-radius: 6px;
-    padding: 2px 7px;
-    min-height: 22px;
+    border: 4px solid var(--audio-hint-outline, #8da3bb);
+    border-radius: 12px;
+    padding: 5px 12px;
+    min-height: 38px;
     display: flex;
     align-items: center;
+    justify-content: center;
+    text-align: center;
     font-size: 0.64rem;
     font-weight: 700;
     letter-spacing: 0.015em;
     white-space: nowrap;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
     z-index: 3;
 }
 
 .audio-launch-hint::before {
     content: "";
     position: absolute;
-    left: -10px;
+    left: -12px;
     top: 50%;
     transform: translateY(-50%);
     width: 0;
     height: 0;
-    border-top: 7px solid transparent;
-    border-bottom: 7px solid transparent;
-    border-right: 9px solid #717a87;
+    border-top: 9px solid transparent;
+    border-bottom: 9px solid transparent;
+    border-right: 15px solid var(--audio-hint-outline, #8da3bb);
 }
 
 .audio-launch-hint::after {
@@ -287,14 +304,26 @@ textarea:disabled {
     height: 0;
     border-top: 5px solid transparent;
     border-bottom: 5px solid transparent;
-    border-right: 7px solid #3a4048;
+    border-right: 12px solid #3a4048;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .audio-launch-hint {
+        animation: audio-hint-border-pulse 2.2s ease-in-out 5;
+    }
+}
+
+@keyframes audio-hint-border-pulse {
+    50% {
+        --audio-hint-outline: #d6efff;
+        box-shadow: 0 0 12px 3px rgba(133, 195, 255, 0.55), 0 4px 10px rgba(0, 0, 0, 0.25);
+    }
 }
 
 .app-tabs {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    width: var(--title-core-width);
-    margin: 0 auto;
+    width: 100%;
     border: 2px solid #bcc2ca;
     border-radius: 0;
     overflow: hidden;
@@ -303,21 +332,6 @@ textarea:disabled {
 
 .has-station-control .app-tabs {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-@media (min-width: 721px) {
-    .tabs-auth-row.has-station-control {
-        gap: 8px;
-    }
-
-    .has-station-control .app-tabs {
-        min-width: 0;
-    }
-
-    .has-station-control .auth-quick {
-        position: static;
-        flex-shrink: 0;
-    }
 }
 
 .tab {
@@ -567,19 +581,38 @@ textarea:disabled {
 }
 
 .control-help-bubble {
+    --bubble-background: color-mix(in srgb, var(--help-yellow) 75%, transparent);
+    --bubble-arrow-size: 8px;
     position: fixed;
-    z-index: 30;
+    z-index: 100;
     width: max-content;
-    max-width: min(240px, calc(100vw - 16px));
+    max-width: min(270px, calc(100vw - 16px));
     padding: 7px 9px;
-    border: 1px solid #9ca6b3;
     border-radius: 4px;
-    background: #303740;
-    color: #f2f5f8;
+    background: var(--bubble-background);
+    color: #17130b;
     font-size: 0.78rem;
     line-height: 1.35;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25));
     pointer-events: none;
+}
+
+.control-help-bubble::before {
+    content: "";
+    position: absolute;
+    left: var(--bubble-arrow-x);
+    bottom: 100%;
+    width: 14px;
+    height: var(--bubble-arrow-size);
+    transform: translateX(-50%);
+    background: var(--bubble-background);
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.control-help-bubble[data-side="above"]::before {
+    top: 100%;
+    bottom: auto;
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
 }
 
 .auth-status {
@@ -2747,6 +2780,12 @@ h3 {
 }
 
 @media (max-width: 480px) {
+    .audio-launch-hint {
+        width: max-content;
+        max-width: calc(50vw - 60px);
+        white-space: normal;
+    }
+
     .has-station-control .app-tabs {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -2791,27 +2830,16 @@ h3 {
 
     .tabs-auth-row {
         width: 100%;
-        display: grid;
-        gap: 8px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .app-tabs {
-        width: 100%;
+        grid-column: 1 / -1;
+        grid-row: 1;
     }
 
     .header-right-controls {
         justify-content: center;
-    }
-
-    .auth-quick {
-        position: static;
-        justify-items: center;
-        align-items: center;
-    }
-
-    .auth-mini-status {
-        max-width: none;
-        text-align: center;
     }
 
     .top-grid,

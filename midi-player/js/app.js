@@ -57,8 +57,8 @@ const sampleChooseButton = document.getElementById("sample-choose");
 const sampleCancelButton = document.getElementById("sample-cancel");
 const PROGRESS_MIN_INTERVAL_MS = 80;
 const helpToggle = document.getElementById("help-toggle");
+const helpToggleText = document.getElementById("help-toggle-text");
 const controlHelpBubble = document.getElementById("control-help-bubble");
-let helpEnabled = false;
 let helpTarget = null;
 const infoToggle = document.getElementById("info-toggle");
 const infoBubbles = document.getElementById("info-bubbles");
@@ -119,6 +119,10 @@ const stationNewsBody = document.getElementById("station-news-body");
 const stationNewsPublish = document.getElementById("station-news-publish");
 const stationNewsRemove = document.getElementById("station-news-remove");
 const stationNewsStatus = document.getElementById("station-news-status");
+const stationMidiFolderForm = document.getElementById("station-midi-folder-form");
+const stationMidiFolder = document.getElementById("station-midi-folder");
+const stationMidiFolderSave = document.getElementById("station-midi-folder-save");
+const stationMidiFolderStatus = document.getElementById("station-midi-folder-status");
 const recomposerNews = document.getElementById("recomposer-news");
 const recomposerNewsHeading = document.getElementById("recomposer-news-heading");
 const recomposerNewsBody = document.getElementById("recomposer-news-body");
@@ -1829,6 +1833,7 @@ function renderLibrarianPlaylists() {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "playlist-item";
+        button.dataset.help = "Choose which playlist appears in the queue. All Songs shows your full library.";
         button.classList.toggle("is-active", playlist.id === activePlaylistId);
         const songCount = playlist.isAllSongs ? librarianItems.length : playlist.songIds.length;
         button.innerHTML = `
@@ -1863,6 +1868,7 @@ function renderLibrarianLibrary() {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "library-item";
+        button.dataset.help = "Load this song and add it to the selected playlist if it isn’t already there.";
         button.classList.toggle("is-active", item.id === activeLibrarianItemId);
         button.innerHTML = `
             <span>
@@ -1941,6 +1947,7 @@ function renderLibrarianQueue() {
     queueItems.forEach((item, index) => {
         const row = document.createElement("div");
         row.className = "queue-item";
+        row.dataset.help = "Select a song from this playlist.";
         row.draggable = true;
         row.dataset.queueIndex = String(index);
         row.classList.toggle("is-active", item.id === activeLibrarianItemId);
@@ -1956,6 +1963,7 @@ function renderLibrarianQueue() {
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "queue-item__remove";
+        remove.dataset.help = "Remove this song from the playlist. It stays in your library.";
         remove.setAttribute("aria-label", `Remove ${item.title} from playlist`);
         remove.textContent = "-";
         remove.disabled = Boolean(playlist?.isAllSongs);
@@ -2002,6 +2010,7 @@ function renderLibrarianQueue() {
             row.classList.remove("is-dragging");
             Array.from(librarianQueue.querySelectorAll(".queue-item")).forEach(itemRow => itemRow.classList.remove("is-drop-target"));
         });
+        row.querySelector(".queue-item__handle").dataset.help = "Drag a song up or down to change the playback order.";
         row.appendChild(remove);
         librarianQueue.appendChild(row);
     });
@@ -2392,7 +2401,7 @@ function isTextEntryTarget(target) {
 }
 
 function handleGlobalPlaybackKeys(event) {
-    if (infoBubbles.open || (event.target instanceof Element && event.target.closest("#info-toggle, #help-toggle, #rewind, .track-mix__button"))) return;
+    if (infoBubbles.open || (event.target instanceof Element && event.target.closest("#info-toggle, #rewind, .track-mix__button"))) return;
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || isTextEntryTarget(event.target)) {
         return;
     }
@@ -3022,6 +3031,7 @@ stationModeSelect.addEventListener("change", showStationModeFilters);
 async function loadStationControl() {
     const userId = stationOperatorId;
     if (!userId) return;
+    loadStationMidiFolder(userId);
     stationModeSelect.disabled = true;
     stationIncludeTags.disabled = true;
     stationExcludeTags.disabled = true;
@@ -3124,6 +3134,69 @@ stationNewsForm.addEventListener("submit", event => {
     saveStationNews(true);
 });
 stationNewsRemove.addEventListener("click", () => saveStationNews(false));
+
+async function readDefaultMidiFolder() {
+    if (!supabaseClient) return null;
+    const { data, error } = await supabaseClient
+        .from("earb_recomposer_midi_browser")
+        .select("default_folder")
+        .maybeSingle();
+    if (error) throw error;
+    return data?.default_folder ?? null;
+}
+
+async function loadStationMidiFolder(userId) {
+    stationMidiFolder.disabled = true;
+    stationMidiFolderSave.disabled = true;
+    stationMidiFolderStatus.textContent = "Loading MIDI folders…";
+    try {
+        const [manifest, folder] = await Promise.all([loadSampleManifest(), readDefaultMidiFolder()]);
+        if (stationOperatorId !== userId) return;
+        if (!manifest) throw new Error("The included MIDI folders could not be loaded.");
+        stationMidiFolder.replaceChildren(...Array.from(sampleFolderSelect.options, option => option.cloneNode(true)));
+        stationMidiFolder.value = getSampleFolderValue(folder);
+        stationMidiFolder.disabled = false;
+        stationMidiFolderSave.disabled = false;
+        stationMidiFolderStatus.textContent = folder && stationMidiFolder.value !== folder
+            ? "The saved folder is unavailable. Load MIDI File opens with All folders."
+            : "";
+    } catch (error) {
+        if (stationOperatorId === userId) {
+            stationMidiFolderStatus.textContent = error?.message || "Could not load the default MIDI folder.";
+        }
+    }
+}
+
+stationMidiFolderForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const userId = stationOperatorId;
+    if (!userId || stationMidiFolderSave.disabled) return;
+    const value = stationMidiFolder.value;
+    if (!value) return;
+    const label = stationMidiFolder.selectedOptions[0].textContent;
+    stationMidiFolder.disabled = true;
+    stationMidiFolderSave.disabled = true;
+    stationMidiFolderStatus.textContent = "Saving the default MIDI folder…";
+    try {
+        const { data, error } = await supabaseClient.rpc("earb_station_set_default_midi_folder", {
+            folder: value === "__all__" ? null : value
+        });
+        if (error) throw error;
+        if (stationOperatorId !== userId) return;
+        sampleModalRequest++;
+        defaultMidiFolder = data;
+        stationMidiFolderStatus.textContent = `Load MIDI File now opens with ${label}.`;
+    } catch (error) {
+        if (stationOperatorId === userId) {
+            stationMidiFolderStatus.textContent = error?.message || "Could not save the default MIDI folder.";
+        }
+    } finally {
+        if (stationOperatorId === userId) {
+            stationMidiFolder.disabled = false;
+            stationMidiFolderSave.disabled = false;
+        }
+    }
+});
 
 function updateAuthUiForUser(user) {
     const previousUserId = currentSupabaseUser?.id;
@@ -3741,7 +3814,6 @@ function isMobileDevice() {
 }
 
 // Soundfont options are hydrated from config.json (defaults to local assets).
-const SAMPLE_MIDIS = [];
 
 let audioContext = null;
 let progressFrame = null;
@@ -3813,7 +3885,10 @@ const METER_ATTACK = 0.45;
 const sampleMidiMap = new Map();
 const includedMidiFolders = new Map();
 let openSampleModal = null;
-let sampleManifestLoaded = false;
+let sampleManifestRequest = null;
+let sampleManifest = [];
+let defaultMidiFolder = null;
+let sampleModalRequest = 0;
 let supabaseClient = null;
 let cloudSettingsSaveTimer = null;
 let pendingCloudSettings = null;
@@ -4170,16 +4245,15 @@ if (sampleCancelButton) {
         setStatus("Sample load canceled.", false);
     });
 }
-helpToggle.addEventListener("click", () => {
-    helpEnabled = !helpEnabled;
-    helpToggle.setAttribute("aria-pressed", String(helpEnabled));
-    helpToggle.textContent = helpEnabled ? "Hide Help Bubbles" : "Show Help Bubbles";
-    if (!helpEnabled) hideControlHelp();
+helpToggle.addEventListener("change", () => {
+    helpToggleText.textContent = helpToggle.checked ? "Hide Help Bubbles" : "Show Help Bubbles";
+    if (helpToggle.checked) showControlHelp(helpToggle);
+    else hideControlHelp();
 });
 
 document.addEventListener("pointerover", event => {
-    if (helpEnabled && event.pointerType !== "touch" && event.target instanceof Element) {
-        showControlHelp(event.target.closest("[data-help]"));
+    if (helpToggle.checked && event.pointerType !== "touch" && event.target instanceof Element) {
+        showControlHelp(event.target);
     }
 });
 document.addEventListener("pointerout", event => {
@@ -4188,7 +4262,7 @@ document.addEventListener("pointerout", event => {
     }
 });
 document.addEventListener("focusin", event => {
-    if (helpEnabled && event.target instanceof Element) showControlHelp(event.target.closest("[data-help]"));
+    if (helpToggle.checked && event.target instanceof Element) showControlHelp(event.target);
 });
 document.addEventListener("focusout", event => {
     if (helpTarget?.contains(event.target)) hideControlHelp();
@@ -4691,6 +4765,7 @@ async function bootstrapApp() {
     loadScalaManifest();
     applyActiveTuning();
     loadSampleManifest();
+    refreshDefaultMidiFolder(sampleModalRequest);
     updateRadiographBroadcastPanel();
 }
 
@@ -4914,6 +4989,7 @@ function renderInstrumentMenus() {
 
         const meter = document.createElement("div");
         meter.className = "track-meter";
+        meter.dataset.help = "Shows the track name, MIDI channel, and note activity during playback.";
         const meterFill = document.createElement("div");
         meterFill.className = "track-meter__fill";
         const meterLabel = document.createElement("div");
@@ -4923,6 +4999,7 @@ function renderInstrumentMenus() {
         meter.appendChild(meterLabel);
 
         const select = document.createElement("select");
+        select.dataset.help = "Choose the instrument/voice for this track. Select Percussion Set to use drum sounds.";
         const bank = getTrackBank(track.slot, channel);
         const program = trackPrograms.get(track.slot) ?? 0;
         select.appendChild(new Option("Percussion Set", buildInstrumentOptionValue(GM_PERCUSSION_BANK, 0)));
@@ -4968,6 +5045,7 @@ function renderInstrumentMenus() {
         volumeValue.textContent = formatTrackVolumeLabel(initialVolume);
         const volumeInput = document.createElement("input");
         volumeInput.type = "range";
+        volumeInput.dataset.help = "Adjust this track’s loudness independently of the other tracks.";
         volumeInput.min = TRACK_VOLUME_RANGE.min.toString();
         volumeInput.max = TRACK_VOLUME_RANGE.max.toString();
         volumeInput.step = "0.01";
@@ -4988,6 +5066,7 @@ function renderInstrumentMenus() {
 
         const transposeWrap = document.createElement("div");
         transposeWrap.className = "track-transpose";
+        transposeWrap.dataset.help = "Shift only this track. Each step moves the notes by one semitone, or selects neighboring drum sounds on a percussion track.";
         const initialTranspose = clampTrackTransposeValue(trackTransposes.get(track.slot) ?? 0, 0);
         const transposeDown = document.createElement("button");
         transposeDown.type = "button";
@@ -5045,8 +5124,8 @@ function renderInstrumentMenus() {
         const mixControls = document.createElement("div");
         mixControls.className = "track-mix";
         const mixActions = [
-            { label: "Mute", tracks: mutedTracks, help: "Silence this track without changing its volume." },
-            { label: "Solo", tracks: soloedTracks, help: "Play only the soloed tracks. Mute still applies." }
+            { label: "Mute", tracks: mutedTracks, help: "Silence this track without changing its volume setting." },
+            { label: "Solo", tracks: soloedTracks, help: "Hear only the tracks marked Solo. You can solo several at once. Mute still takes priority." }
         ];
         for (const { label, tracks, help } of mixActions) {
             const button = document.createElement("button");
@@ -5297,6 +5376,7 @@ function renderKeyframeLane() {
         marker.textContent = String(index + 1);
         marker.style.setProperty("--keyframe-position", `${frame.position * 100}%`);
         marker.setAttribute("aria-label", `Keyframe ${index + 1} at ${formatKeyframeTime(frame.position)}`);
+        marker.dataset.help = "Click a marker to jump to it and edit its settings. Keyframe 1 holds the starting settings and is restored when the song loops.";
         marker.addEventListener("click", () => editKeyframeAt(frame.position));
         return marker;
     }));
@@ -5505,40 +5585,48 @@ function setSampleButtonEnabled(enabled) {
 
 setSampleButtonEnabled(false);
 
-async function loadSampleManifest() {
-    if (sampleManifestLoaded) return;
-    try {
-        const response = await fetch(SAMPLE_MANIFEST_URL, { cache: "no-cache" });
-        if (!response.ok) {
-            throw new Error(`Manifest fetch failed (${response.status})`);
-        }
-        const data = await response.json();
-        const resolved = (Array.isArray(data) ? data : []).map(item => ({
-            ...item,
-            url: resolveMidiAssetUrl(item?.url)
-        }));
-        resolved.forEach(item => {
-            if (item.id && typeof item.folder === "string") includedMidiFolders.set(item.id, item.folder);
-        });
-        populateSampleFolderSelect(resolved);
-        populateSampleMidiSelect(resolved);
-        sampleManifestLoaded = true;
-        setSampleButtonEnabled(audioReady);
-        if (sampleFolderSelect) {
-            sampleFolderSelect.addEventListener("change", () => {
-                const selected = sampleFolderSelect.value;
-                const filtered = resolved.filter(item => {
-                    const itemFolder = item.folder === "." ? "" : (item.folder || "");
-                    if (selected === "__all__") return true;
-                    if (selected === "__root__") return !itemFolder;
-                    return itemFolder === selected;
-                });
-                populateSampleMidiSelect(filtered);
+function loadSampleManifest() {
+    sampleManifestRequest ??= fetch(SAMPLE_MANIFEST_URL, { cache: "no-cache" })
+        .then(async response => {
+            if (!response.ok) throw new Error(`Manifest fetch failed (${response.status})`);
+            const data = await response.json();
+            sampleManifest = (Array.isArray(data) ? data : [])
+                .filter(item => item?.url && item?.name)
+                .map(item => ({ ...item, url: resolveMidiAssetUrl(item.url) }));
+            sampleManifest.forEach(item => {
+                if (item.id && typeof item.folder === "string") includedMidiFolders.set(item.id, item.folder);
             });
-        }
-    } catch (error) {
-        console.warn("Unable to load MIDI manifest:", error);
-        setStatus("Included MIDI list unavailable.", true);
+            populateSampleFolderSelect(sampleManifest);
+            selectSampleFolder(defaultMidiFolder);
+            setSampleButtonEnabled(audioReady);
+            return sampleManifest;
+        })
+        .catch(error => {
+            sampleManifestRequest = null;
+            console.warn("Unable to load MIDI manifest:", error);
+            setStatus("Included MIDI list unavailable.", true);
+            return null;
+        });
+    return sampleManifestRequest;
+}
+
+function getSampleFolderValue(folder) {
+    return Array.from(sampleFolderSelect.options).some(option => option.value === folder) ? folder : "__all__";
+}
+
+function selectSampleFolder(folder) {
+    const selected = getSampleFolderValue(folder);
+    sampleFolderSelect.value = selected;
+    populateSampleMidiSelect(sampleManifest.filter(item => {
+        const itemFolder = item.folder === "." ? "" : (item.folder || "");
+        return selected === "__all__" || selected === (itemFolder || "__root__");
+    }));
+}
+
+sampleFolderSelect.addEventListener("change", () => selectSampleFolder(sampleFolderSelect.value));
+for (const select of [sampleFolderSelect, sampleMidiSelect]) {
+    for (const event of ["pointerdown", "keydown", "change"]) {
+        select.addEventListener(event, () => { sampleModalRequest++; });
     }
 }
 
@@ -5564,7 +5652,7 @@ function populateSampleFolderSelect(manifest) {
     sampleFolderSelect.value = "__all__";
 }
 
-function populateSampleMidiSelect(manifest = SAMPLE_MIDIS) {
+function populateSampleMidiSelect(manifest) {
     if (!sampleMidiSelect) return;
     sampleMidiSelect.innerHTML = "";
     sampleMidiMap.clear();
@@ -5598,25 +5686,36 @@ function hideControlHelp() {
     controlHelpBubble.hidden = true;
 }
 
-function showControlHelp(target) {
-    if (target === helpTarget) return;
+function showControlHelp(origin) {
+    const owner = origin.closest("[data-help]");
+    const control = origin.closest("button, input, select, textarea, .radiograph-queue-item, .radiograph-popularity-item, .radiograph-comment");
+    const target = owner?.contains(control) ? control : owner;
+    const message = owner?.dataset.help;
+    if (target === helpTarget && message === controlHelpBubble.textContent) return;
     hideControlHelp();
-    if (!target?.dataset.help) return;
+    if (!message) return;
+
     helpTarget = target;
-    controlHelpBubble.textContent = target.dataset.help;
+    const layer = target.closest("dialog[open]") || document.body;
+    if (controlHelpBubble.parentElement !== layer) layer.appendChild(controlHelpBubble);
+    controlHelpBubble.textContent = message;
     controlHelpBubble.hidden = false;
     const description = target.getAttribute("aria-describedby");
     target.setAttribute("aria-describedby", [description, controlHelpBubble.id].filter(Boolean).join(" "));
 
-    const control = target.getBoundingClientRect();
+    const bounds = target.getBoundingClientRect();
     const bubble = controlHelpBubble.getBoundingClientRect();
     const inset = 8;
-    const left = Math.max(inset, Math.min(control.left, window.innerWidth - bubble.width - inset));
-    const top = control.bottom + bubble.height + 2 * inset <= window.innerHeight
-        ? control.bottom + inset
-        : Math.max(inset, control.top - bubble.height - inset);
+    const arrow = parseFloat(getComputedStyle(controlHelpBubble).getPropertyValue("--bubble-arrow-size"));
+    const center = bounds.left + bounds.width / 2;
+    const left = Math.max(inset, Math.min(center - bubble.width / 2, window.innerWidth - bubble.width - inset));
+    const roomBelow = window.innerHeight - bounds.bottom - inset;
+    const roomAbove = bounds.top - inset;
+    const above = roomBelow < bubble.height + arrow && roomAbove > roomBelow;
+    controlHelpBubble.dataset.side = above ? "above" : "below";
     controlHelpBubble.style.left = `${left}px`;
-    controlHelpBubble.style.top = `${top}px`;
+    controlHelpBubble.style.top = `${above ? bounds.top - bubble.height - arrow : bounds.bottom + arrow}px`;
+    controlHelpBubble.style.setProperty("--bubble-arrow-x", `${Math.max(inset, Math.min(center - left, bubble.width - inset))}px`);
 }
 
 function setInfoVisibility(show) {
@@ -5649,9 +5748,26 @@ async function loadSampleByRecord(sample) {
     }
 }
 
+async function refreshDefaultMidiFolder(request) {
+    try {
+        const folder = await readDefaultMidiFolder();
+        if (request !== sampleModalRequest) return;
+        defaultMidiFolder = folder;
+        if (!sampleModal.classList.contains("is-hidden") && getSampleFolderValue(folder) !== sampleFolderSelect.value) {
+            selectSampleFolder(folder);
+        }
+    } catch (error) {
+        console.warn("The default MIDI folder could not be loaded:", error);
+    }
+}
+
 function showSampleModal() {
     if (!sampleModal) return;
+    const request = ++sampleModalRequest;
+    selectSampleFolder(defaultMidiFolder);
     sampleModal.classList.remove("is-hidden");
+    loadSampleManifest();
+    refreshDefaultMidiFolder(request);
     if (sampleMidiSelect && !sampleMidiSelect.disabled) {
         sampleMidiSelect.focus();
     }
@@ -5659,6 +5775,7 @@ function showSampleModal() {
 
 function hideSampleModal() {
     if (!sampleModal) return;
+    sampleModalRequest++;
     sampleModal.classList.add("is-hidden");
 }
 
@@ -6968,6 +7085,8 @@ async function startRecordingSession() {
     disableControlsForRecording(true);
     dismissKeyframePrompt();
     recordButton.textContent = "STOP RECORDING";
+    recordButton.dataset.help = "End the recording and save the audio captured so far.";
+    if (helpTarget === recordButton) showControlHelp(recordButton);
     recordButton.classList.add("recording");
     recordButton.disabled = false;
     setStatus("Recording full song...", false);
@@ -7038,6 +7157,8 @@ async function stopRecordingSession(autoTriggered) {
     loopToggle.checked = previousLoopState;
     fluidRenderer.setLoopEnabled(loopToggle.checked);
     recordButton.textContent = "RECORD TO DESKTOP";
+    recordButton.dataset.help = "Record the arrangement from the beginning and save it as an audio file.";
+    if (helpTarget === recordButton) showControlHelp(recordButton);
     recordButton.classList.remove("recording");
     let finalBlob = blob;
     let filename = "mixdown.wav";

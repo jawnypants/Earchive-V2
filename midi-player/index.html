@@ -10,14 +10,11 @@
     <header class="title-shell">
         <div class="title-band">
             <div class="title-frame title-frame--left">
-                <div class="header-audio-controls">
-                    <div class="audio-launch-hint-wrap">
-                        <button id="enable-audio" class="glass-button glass-button--audio" type="button" aria-pressed="false" data-help="Turn on sound in your browser.">
-                            <span class="glass-button__label">Audio</span>
-                        </button>
-                        <div id="audio-launch-hint" class="audio-launch-hint" role="note">click Audio to begin</div>
-                    </div>
-                    <button id="help-toggle" class="help-bubbles-toggle" type="button" aria-pressed="false">Show Help Bubbles</button>
+                <div class="audio-launch-hint-wrap">
+                    <button id="enable-audio" class="glass-button glass-button--audio" type="button" aria-pressed="false" data-help="Enable sound in this browser.">
+                        <span class="glass-button__label">Audio</span>
+                    </button>
+                    <div id="audio-launch-hint" class="audio-launch-hint" role="note">click Audio to begin</div>
                 </div>
             </div>
 
@@ -30,7 +27,7 @@
 
             <div class="title-frame title-frame--right">
                 <div class="header-right-controls">
-                    <button id="info-toggle" class="glass-button glass-button--info" type="button" aria-label="Show info" aria-haspopup="dialog" aria-controls="info-bubbles">
+                    <button id="info-toggle" class="glass-button glass-button--info" type="button" aria-label="Show info" aria-haspopup="dialog" aria-controls="info-bubbles" data-help="Read about the Earchive and what you can do here.">
                         <span class="glass-button__label">Info</span>
                     </button>
                 </div>
@@ -38,14 +35,18 @@
         </div>
 
         <div class="tabs-auth-row">
+            <div class="help-bubbles-toggle">
+                <span id="help-toggle-text">Show Help Bubbles</span>
+                <input id="help-toggle" type="checkbox" aria-labelledby="help-toggle-text" autocomplete="off" data-help="Check the box to show tips when you hover over a control or reach it with the keyboard.">
+            </div>
             <nav class="app-tabs" aria-label="Earchive sections">
-                <button class="tab is-active" type="button" data-page="recomposer" aria-current="page">Recomposer</button>
-                <button class="tab" type="button" data-page="librarian">Librarian</button>
-                <button class="tab" type="button" data-page="radiograph">RadioGraph</button>
-                <button id="station-control-tab" class="tab is-hidden" type="button" data-page="station-control">Control Panel</button>
+                <button class="tab is-active" type="button" data-page="recomposer" aria-current="page" data-help="Open a MIDI file and change how it sounds.">Recomposer</button>
+                <button class="tab" type="button" data-page="librarian" data-help="Find your saved music, build playlists, and listen.">Librarian</button>
+                <button class="tab" type="button" data-page="radiograph" data-help="Listen to the live station, rate songs, or submit an arrangement.">RadioGraph</button>
+                <button id="station-control-tab" class="tab is-hidden" type="button" data-page="station-control" data-help="Manage the active RadioGraph show and publish news on Recomposer.">Control Panel</button>
             </nav>
             <div class="auth-quick">
-                <button id="auth-launch" type="button">Sign In</button>
+                <button id="auth-launch" type="button" data-help="Sign in to save arrangements, publish, rate, and comment. Open Account to sign out.">Sign In</button>
                 <div id="auth-mini-status" class="auth-mini-status">Not signed in.</div>
             </div>
         </div>
@@ -73,20 +74,20 @@
                     <section class="panel recomposer-left-panel">
                         <section class="recomposer-block panel-select">
                             <div class="row tight action-row">
-                                <button id="load-button" data-help="Choose a MIDI file from your computer or the included library." class="button action-button" type="button" disabled>LOAD MIDI FILE</button>
-                                <button id="load-arrangement" data-help="Sign in to reopen an arrangement you saved." class="button action-button" type="button" title="Sign in to load saved arrangements">LOAD ARRANGEMENT</button>
-                                <button id="save-arrangement" data-help="Save the current arrangement and its keyframes to your library." class="button action-button" type="button" title="Sign in to enable arrangement saving" disabled>SAVE ARRANGEMENT</button>
-                                <button id="record" data-help="Record this arrangement to an audio file on your computer." class="button action-button" type="button" disabled>RECORD TO DESKTOP</button>
+                                <button id="load-button" class="button action-button" type="button" disabled data-help="Open a MIDI file from your computer or choose one from the Earchive library.">LOAD MIDI FILE</button>
+                                <button id="load-arrangement" class="button action-button" type="button" title="Sign in to load saved arrangements" data-help="Reopen a saved arrangement with its instruments, tuning, and keyframes.">LOAD ARRANGEMENT</button>
+                                <button id="save-arrangement" class="button action-button" type="button" title="Sign in to enable arrangement saving" disabled data-help="Save the MIDI and its current settings, including keyframes, to your library.">SAVE ARRANGEMENT</button>
+                                <button id="record" class="button action-button" type="button" disabled data-help="Record the arrangement from the beginning and save it as an audio file.">RECORD TO DESKTOP</button>
                             </div>
                             <div id="status" class="inline-status">Click Audio to begin.</div>
                         </section>
 
                         <section id="controls-panel" class="recomposer-block panel-transport">
                             <div class="transport-shapes" role="group" aria-label="Transport controls">
-                                <button id="rewind" data-help="Return to the beginning and restore Keyframe 1." class="transport-shape transport-shape--rewind" type="button" aria-label="Rewind to Beginning" disabled></button>
-                                <button id="play" data-help="Play the current arrangement." class="transport-shape transport-shape--play" type="button" aria-label="Play" disabled></button>
-                                <button id="pause" data-help="Pause playback at the current position." class="transport-shape transport-shape--pause" type="button" aria-label="Pause" disabled></button>
-                                <button id="stop" data-help="Stop playback and return to the beginning." class="transport-shape transport-shape--stop" type="button" aria-label="Stop" disabled></button>
+                                <button id="rewind" class="transport-shape transport-shape--rewind" type="button" aria-label="Rewind to Beginning" disabled data-help="Rewind to beginning. Playback continues if it was already running."></button>
+                                <button id="play" class="transport-shape transport-shape--play" type="button" aria-label="Play" disabled data-help="Play from the current position, including a keyframe you just edited."></button>
+                                <button id="pause" class="transport-shape transport-shape--pause" type="button" aria-label="Pause" disabled data-help="Stops Playback keeping position in song."></button>
+                                <button id="stop" class="transport-shape transport-shape--stop" type="button" aria-label="Stop" disabled data-help="Stop playback and return to the beginning."></button>
                             </div>
                             <div class="transport-shape-labels" aria-hidden="true">
                                 <span>REWIND</span>
@@ -95,21 +96,21 @@
                                 <span>STOP</span>
                             </div>
                             <input type="checkbox" id="loop-toggle" class="is-hidden" checked>
-                            <div id="progress-time" class="progress-time-row">
+                            <div id="progress-time" class="progress-time-row" data-help="Drag the scrubber to jump to another point. The times show how much has played and how much remains.">
                                 <span id="progress-elapsed">0:00</span>
                                 <span id="progress-remaining">-0:00</span>
                             </div>
                             <div class="row tight transport-progress-row">
-                                <input id="progress" type="range" min="0" max="0" step="0.01" value="0">
+                                <input id="progress" type="range" min="0" max="0" step="0.01" value="0" data-help="Drag the scrubber to jump to another point. The times show how much has played and how much remains.">
                             </div>
                             <div id="keyframe-editor" class="keyframe-editor">
                                 <div id="keyframe-lane" class="keyframe-lane">
                                     <span class="keyframe-lane-label" aria-hidden="true">Keyframes</span>
-                                    <button id="keyframe-place" data-help="Click here to pause and add a keyframe for settings that should change during playback." class="keyframe-place" type="button" aria-label="Choose a keyframe position" title="Click the timeline to choose a position. With the keyboard, use the progress slider and press Enter here." disabled></button>
+                                    <button id="keyframe-place" class="keyframe-place" type="button" aria-label="Choose a keyframe position" title="Click the timeline to choose a position. With the keyboard, use the progress slider and press Enter here." disabled data-help="Click where you want a change to begin. Playback pauses so you can add a keyframe and edit any settings."></button>
                                     <div id="keyframe-markers" class="keyframe-markers" role="group" aria-label="Arrangement keyframes"></div>
                                 </div>
                                 <div class="keyframe-caption">
-                                    <label id="keyframe-confirmation" class="is-hidden"><input id="keyframe-confirm" type="checkbox"> Keyframe</label>
+                                    <label id="keyframe-confirmation" class="is-hidden" data-help="Check to save a keyframe here. Uncheck to remove that keyframe."><input id="keyframe-confirm" type="checkbox"> Keyframe</label>
                                     <span id="keyframe-status" aria-live="polite">Keyframe 1 holds the starting settings.</span>
                                 </div>
                             </div>
@@ -117,23 +118,23 @@
                             <div class="panel-heading-row transport-heading-row">
                                 <h2>Tuning &amp; Modality</h2>
                                 <div class="favorites-control">
-                                    <select id="favorites-select-scale" aria-label="Favorites for tuning and modality">
+                                    <select id="favorites-select-scale" aria-label="Favorites for tuning and modality" data-help="Apply a saved preset for tuning, mode, tempo, and track settings. Both menus use the same presets.">
                                         <option value="__default__">default</option>
                                     </select>
-                                    <button id="favorites-add-scale" type="button" class="mini-button">+</button>
-                                    <button id="favorites-remove-scale" type="button" class="mini-button">-</button>
+                                    <button id="favorites-add-scale" type="button" class="mini-button" data-help="Save the current settings as a named preset you can use again.">+</button>
+                                    <button id="favorites-remove-scale" type="button" class="mini-button" data-help="Delete the selected preset from Favorites.">-</button>
                                 </div>
                             </div>
                             <div class="transport-meta-row">
                                 <div class="transport-meta-control">
                                     <label for="tempo-slider">TEMPO</label>
-                                    <input id="tempo-slider" data-help="Set playback speed as a percentage of the original tempo." type="number" min="25" max="200" step="1" value="100" disabled>
-                                    <button id="tempo-reset" type="button" class="mini-button" disabled>Reset</button>
+                                    <input id="tempo-slider" type="number" min="25" max="200" step="1" value="100" disabled data-help="Set the speed as a percentage of the original tempo. Reset returns it to 100%.">
+                                    <button id="tempo-reset" type="button" class="mini-button" disabled data-help="Set the speed as a percentage of the original tempo. Reset returns it to 100%.">Reset</button>
                                     <span id="tempo-value" class="is-hidden">100%</span>
                                 </div>
                                 <div class="transport-meta-control">
                                     <label for="mode-select">MODALITY</label>
-                                    <select id="mode-select" data-help="Choose a musical mode for this arrangement." disabled>
+                                    <select id="mode-select" disabled data-help="Change the song’s musical mode, such as Dorian or Aeolian.">
                                         <option value="Ionian">Ionian</option>
                                         <option value="Dorian">Dorian</option>
                                         <option value="Phrygian">Phrygian</option>
@@ -145,23 +146,23 @@
                                 </div>
                                 <div class="transport-meta-control">
                                     <label for="transpose-input">TRANSPOSE</label>
-                                    <input id="transpose-input" data-help="Shift the arrangement up or down in semitones." type="number" value="0" min="-24" max="24" step="1" disabled>
-                                    <button id="transpose-reset" type="button" class="mini-button" disabled>Reset</button>
+                                    <input id="transpose-input" type="number" value="0" min="-24" max="24" step="1" disabled data-help="Shift the whole arrangement up or down in semitones. Reset returns it to zero.">
+                                    <button id="transpose-reset" type="button" class="mini-button" disabled data-help="Shift the whole arrangement up or down in semitones. Reset returns it to zero.">Reset</button>
                                 </div>
                             </div>
                             <div class="transport-tuning-row">
                                 <label>TUNING</label>
                                 <div class="transport-tuning-selects">
-                                    <select id="tuning-folder-select" disabled>
+                                    <select id="tuning-folder-select" disabled data-help="Show tunings from a particular folder, or choose All Folders to see the whole collection.">
                                         <option value="__all__">All folders</option>
                                     </select>
-                                    <select id="tuning-select" data-help="Choose a tuning for the current keyframe." disabled>
+                                    <select id="tuning-select" disabled data-help="Choose how the notes are tuned from this keyframe onward.">
                                         <option value="__equal__" selected>12-TET (Default)</option>
                                     </select>
                                 </div>
                                 <div class="transport-tuning-actions">
-                                    <button id="tuning-reset" type="button" class="mini-button" disabled>Reset Tuning</button>
-                                    <button id="tuning-source-toggle" type="button" class="mini-button" aria-pressed="false">Switch to Full Archive</button>
+                                    <button id="tuning-reset" type="button" class="mini-button" disabled data-help="Return to standard 12-tone equal temperament.">Reset Tuning</button>
+                                    <button id="tuning-source-toggle" type="button" class="mini-button" aria-pressed="false" data-help="Switch between the full Scala tuning archive and the smaller collection. May require time to load">Switch to Full Archive</button>
                                 </div>
                             </div>
                         </section>
@@ -178,11 +179,11 @@
                     <div class="panel-heading-row">
                         <h2>Instrumentation</h2>
                         <div class="favorites-control">
-                            <select id="favorites-select-inst" aria-label="Favorites for instrumentation">
+                            <select id="favorites-select-inst" aria-label="Favorites for instrumentation" data-help="Apply a saved preset for tuning, mode, tempo, and track settings. Both menus use the same presets.">
                                 <option value="__default__">default</option>
                             </select>
-                            <button id="favorites-add-inst" type="button" class="mini-button">+</button>
-                            <button id="favorites-remove-inst" type="button" class="mini-button">-</button>
+                            <button id="favorites-add-inst" type="button" class="mini-button" data-help="Save the current settings as a named preset you can use again.">+</button>
+                            <button id="favorites-remove-inst" type="button" class="mini-button" data-help="Delete the selected preset from Favorites.">-</button>
                         </div>
                     </div>
                     <div id="instrument-menus" class="instrument-grid"></div>
@@ -213,13 +214,13 @@
                     <p id="librarian-now-meta">Import a MIDI, restore a saved arrangement, or choose an item below.</p>
                 </div>
                 <div class="librarian-player__transport" role="group" aria-label="Playback controls">
-                    <button id="librarian-play" class="librarian-icon-button librarian-icon-button--play" type="button" aria-label="Play selected composition"></button>
-                    <button id="librarian-pause" class="librarian-icon-button librarian-icon-button--pause" type="button" aria-label="Pause playback"></button>
-                    <button id="librarian-stop" class="librarian-icon-button librarian-icon-button--stop" type="button" aria-label="Stop playback"></button>
+                    <button id="librarian-play" class="librarian-icon-button librarian-icon-button--play" type="button" aria-label="Play selected composition" data-help="Play the selected song, pause it, or stop and return to the beginning."></button>
+                    <button id="librarian-pause" class="librarian-icon-button librarian-icon-button--pause" type="button" aria-label="Pause playback" data-help="Play the selected song, pause it, or stop and return to the beginning."></button>
+                    <button id="librarian-stop" class="librarian-icon-button librarian-icon-button--stop" type="button" aria-label="Stop playback" data-help="Play the selected song, pause it, or stop and return to the beginning."></button>
                 </div>
                 <div class="librarian-comment-form" aria-label="Comment on RadioGraph source">
-                    <input id="librarian-comment-input" type="text" maxlength="500" placeholder="Comment on RadioGraph source">
-                    <button id="librarian-comment-submit" class="button librarian-action librarian-action--save" type="button" disabled>COMMENT</button>
+                    <input id="librarian-comment-input" type="text" maxlength="500" placeholder="Comment on RadioGraph source" data-help="Post a comment on the original broadcast linked to this saved song.">
+                    <button id="librarian-comment-submit" class="button librarian-action librarian-action--save" type="button" disabled data-help="Post a comment on the original broadcast linked to this saved song.">COMMENT</button>
                     <div id="librarian-comment-status" class="inline-status librarian-status" aria-live="polite">Select a RadioGraph save to comment.</div>
                 </div>
             </section>
@@ -229,8 +230,8 @@
                     <div class="panel-heading-row">
                         <h2 id="playlist-heading">Playlist</h2>
                         <div class="playlist-title-actions" role="group" aria-label="Playlist actions">
-                            <button id="librarian-add-playlist" data-help="Create a playlist for songs in your library." class="mini-button playlist-title-button" type="button" aria-label="Add playlist">+</button>
-                            <button id="librarian-delete-playlist" class="mini-button playlist-title-button" type="button" aria-label="Delete playlist">-</button>
+                            <button id="librarian-add-playlist" class="mini-button playlist-title-button" type="button" aria-label="Add playlist" data-help="Create a named playlist.">+</button>
+                            <button id="librarian-delete-playlist" class="mini-button playlist-title-button" type="button" aria-label="Delete playlist" data-help="Delete this playlist. Its songs stay in your library.">-</button>
                         </div>
                     </div>
                     <div id="librarian-playlists" class="playlist-list" aria-label="Playlists"></div>
@@ -240,10 +241,10 @@
                     <div class="panel-heading-row">
                         <h2 id="queue-heading">Queue</h2>
                         <div class="queue-transport-controls" role="group" aria-label="Queue transport">
-                            <button id="queue-previous" class="queue-transport-button queue-transport-button--previous" type="button" aria-label="Previous song" data-hint="←"></button>
-                            <button id="queue-play-toggle" class="queue-transport-button queue-transport-button--play" type="button" aria-label="Play queue" data-hint="spacebar"></button>
-                            <button id="queue-next" class="queue-transport-button queue-transport-button--next" type="button" aria-label="Next song" data-hint="→"></button>
-                            <button id="queue-shuffle-toggle" class="queue-transport-button queue-transport-button--play-next" type="button" aria-label="Play next mode" aria-pressed="false" data-hint="Play Next / Shuffle"></button>
+                            <button id="queue-previous" class="queue-transport-button queue-transport-button--previous" type="button" aria-label="Previous song" data-hint="←" data-help="Press once to restart this song. Press again quickly to go to the previous song."></button>
+                            <button id="queue-play-toggle" class="queue-transport-button queue-transport-button--play" type="button" aria-label="Play queue" data-hint="spacebar" data-help="Start or pause the playlist queue. The spacebar also works."></button>
+                            <button id="queue-next" class="queue-transport-button queue-transport-button--next" type="button" aria-label="Next song" data-hint="→" data-help="Skip to the next song in the queue."></button>
+                            <button id="queue-shuffle-toggle" class="queue-transport-button queue-transport-button--play-next" type="button" aria-label="Play next mode" aria-pressed="false" data-hint="Play Next / Shuffle" data-help="Switch between playing the queue in order and choosing the next song at random."></button>
                         </div>
                     </div>
                     <div class="queue-repeat-note">Playlist repeat is on by default.</div>
@@ -254,13 +255,13 @@
                     <div class="panel-heading-row">
                         <h2 id="songs-heading">Songs</h2>
                         <div class="librarian-filter-group" role="group" aria-label="Song filters">
-                            <button class="librarian-filter is-active" type="button" data-library-filter="all">All</button>
-                            <button class="librarian-filter" type="button" data-library-filter="saved">My Saved</button>
-                            <button class="librarian-filter" type="button" data-library-filter="broadcast">Saved From Broadcast</button>
+                            <button class="librarian-filter is-active" type="button" data-library-filter="all" data-help="Show your saved arrangements and saved RadioGraph songs together.">All</button>
+                            <button class="librarian-filter" type="button" data-library-filter="saved" data-help="Show arrangements you saved in Recomposer.">My Saved</button>
+                            <button class="librarian-filter" type="button" data-library-filter="broadcast" data-help="Show songs you saved from RadioGraph.">Saved From Broadcast</button>
                         </div>
                     </div>
                     <div id="librarian-library-list" class="librarian-list" aria-label="Songs"></div>
-                    <button id="librarian-edit-tags" class="button librarian-action" type="button" disabled>Edit Tags</button>
+                    <button id="librarian-edit-tags" class="button librarian-action" type="button" disabled data-help="Change the tags on the selected song. Separate tags with commas.">Edit Tags</button>
                 </section>
             </div>
             <div id="librarian-status" class="inline-status librarian-status" aria-live="polite">The Librarian is ready.</div>
@@ -298,9 +299,9 @@
                         </div>
                         <audio id="radiograph-audio" preload="none" crossorigin="anonymous"></audio>
                         <div class="radiograph-station-controls" role="group" aria-label="Radio controls">
-                            <button id="radiograph-play" data-help="Listen to the live RadioGraph station." class="radiograph-control radiograph-control--play" type="button" aria-label="Play live radio"></button>
-                            <button id="radiograph-mute" class="radiograph-control radiograph-control--mute" type="button" aria-label="Mute live radio" aria-pressed="false"></button>
-                            <button id="radiograph-reconnect" class="radiograph-control radiograph-control--reconnect" type="button" aria-label="Reconnect live radio"></button>
+                            <button id="radiograph-play" class="radiograph-control radiograph-control--play" type="button" aria-label="Play live radio" data-help="Join the station at its current point in the broadcast."></button>
+                            <button id="radiograph-mute" class="radiograph-control radiograph-control--mute" type="button" aria-label="Mute live radio" aria-pressed="false" data-help="Silence the live stream. Unmute to hear what’s playing then."></button>
+                            <button id="radiograph-reconnect" class="radiograph-control radiograph-control--reconnect" type="button" aria-label="Reconnect live radio" data-help="Reconnect if the stream stalls or falls behind."></button>
                         </div>
                         <div id="radiograph-status" class="inline-status radiograph-status" aria-live="polite">RadioGraph is ready for the stream endpoint.</div>
                     </section>
@@ -309,24 +310,24 @@
                         <h2 id="radiograph-submit-heading">SUBMIT FOR BROADCAST</h2>
                         <div id="radiograph-broadcast-arrangement" class="radiograph-draft-summary" hidden></div>
                         <div class="radiograph-submit-actions">
-                            <button id="radiograph-load-arrangement" data-help="Choose a saved arrangement to broadcast." class="button radiograph-action" type="button">LOAD ARRANGEMENT FOR BROADCAST</button>
-                            <button id="radiograph-submit" data-help="Send the selected arrangement to the station." class="button radiograph-action radiograph-action--primary" type="button" disabled>SUBMIT TO STATION</button>
+                            <button id="radiograph-load-arrangement" class="button radiograph-action" type="button" data-help="Choose an arrangement you saved under a new name in Recomposer. It must match the active show’s tags and be available for its first submission.">LOAD ARRANGEMENT FOR BROADCAST</button>
+                            <button id="radiograph-submit" class="button radiograph-action radiograph-action--primary" type="button" disabled data-help="Send the loaded arrangement to the station. Follow its progress under Published Songs.">SUBMIT TO STATION</button>
                         </div>
                         <div id="radiograph-submit-status" class="inline-status radiograph-status" aria-live="polite">Save your arrangement under a new name in Recomposer before loading it here.</div>
                     </section>
 
                     <section class="panel radiograph-panel" aria-labelledby="radiograph-published-heading">
-                        <h2 id="radiograph-published-heading">Published Songs</h2>
+                        <h2 id="radiograph-published-heading" data-help="See your submitted arrangements, their positions in the station queue, and their listener ratings.">Published Songs</h2>
                         <p id="radiograph-published-status" class="radiograph-panel-copy" role="status">Sign in to see your published songs.</p>
-                        <ul id="radiograph-published-list" class="radiograph-queue-list radiograph-published-list" aria-labelledby="radiograph-published-heading"></ul>
+                        <ul id="radiograph-published-list" class="radiograph-queue-list radiograph-published-list" aria-labelledby="radiograph-published-heading" data-help="See your submitted arrangements, their positions in the station queue, and their listener ratings."></ul>
                     </section>
 
                     <section class="panel radiograph-panel radiograph-panel--popular" aria-labelledby="radiograph-popular-heading">
                         <div class="panel-heading-row">
-                            <h2 id="radiograph-popular-heading">Popularity</h2>
+                            <h2 id="radiograph-popular-heading" data-help="See which broadcasts listeners have rated highly.">Popularity</h2>
                             <span id="radiograph-leaderboard-mode" class="radiograph-stat-chip">all time</span>
                         </div>
-                        <div id="radiograph-popularity-list" class="radiograph-popularity-list" aria-label="Popular broadcasts">
+                        <div id="radiograph-popularity-list" class="radiograph-popularity-list" aria-label="Popular broadcasts" data-help="See which broadcasts listeners have rated highly.">
                             <div class="radiograph-popularity-item">
                                 <span>
                                     <span class="radiograph-popularity-title">Waiting for ratings</span>
@@ -347,23 +348,23 @@
                         <div class="radiograph-now-card">
                             <span class="radiograph-kicker">Current Broadcast</span>
                             <h3 id="radiograph-now-title">Waiting for station status</h3>
-                            <p id="radiograph-now-meta">The live stream can play before metadata is available.</p>
+                            <p id="radiograph-now-meta" data-help="See how much time is left in the current broadcast.">The live stream can play before metadata is available.</p>
                         </div>
                         <div class="radiograph-rating" aria-label="Rate current song">
-                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="1" aria-label="Rate 1">1</button>
-                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="2" aria-label="Rate 2">2</button>
-                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="3" aria-label="Rate 3">3</button>
-                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="4" aria-label="Rate 4">4</button>
-                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="5" aria-label="Rate 5">5</button>
+                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="1" aria-label="Rate 1" data-help="Sign in to rate this broadcast. You can change your rating, and ratings affect how often songs are played.">1</button>
+                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="2" aria-label="Rate 2" data-help="Sign in to rate this broadcast. You can change your rating, and ratings affect how often songs are played.">2</button>
+                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="3" aria-label="Rate 3" data-help="Sign in to rate this broadcast. You can change your rating, and ratings affect how often songs are played.">3</button>
+                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="4" aria-label="Rate 4" data-help="Sign in to rate this broadcast. You can change your rating, and ratings affect how often songs are played.">4</button>
+                            <button class="radiograph-rating-button" type="button" data-radiograph-rating="5" aria-label="Rate 5" data-help="Sign in to rate this broadcast. You can change your rating, and ratings affect how often songs are played.">5</button>
                         </div>
-                        <button id="radiograph-save-library" class="button radiograph-action radiograph-action--primary radiograph-save-library" type="button" disabled>SAVE CURRENT SONG TO MY LIBRARY</button>
+                        <button id="radiograph-save-library" class="button radiograph-action radiograph-action--primary radiograph-save-library" type="button" disabled data-help="Save this broadcast under Saved From Broadcast in the Librarian so you can replay it or add it to a playlist.">SAVE CURRENT SONG TO MY LIBRARY</button>
                         <div class="radiograph-comments" aria-label="Comments for current broadcast">
-                            <div id="radiograph-comments-list" class="radiograph-comments-list">
+                            <div id="radiograph-comments-list" class="radiograph-comments-list" data-help="Sign in to leave a comment on the current broadcast. Comments stay with the song when it plays again.">
                                 <div class="radiograph-comment-empty">Comments will appear here while this song is linked to RadioGraph.</div>
                             </div>
                             <div class="radiograph-comment-form">
-                                <input id="radiograph-comment-input" type="text" maxlength="500" placeholder="Comment on this song">
-                                <button id="radiograph-comment-submit" class="button radiograph-action radiograph-action--primary" type="button" disabled>COMMENT</button>
+                                <input id="radiograph-comment-input" type="text" maxlength="500" placeholder="Comment on this song" data-help="Sign in to leave a comment on the current broadcast. Comments stay with the song when it plays again.">
+                                <button id="radiograph-comment-submit" class="button radiograph-action radiograph-action--primary" type="button" disabled data-help="Sign in to leave a comment on the current broadcast. Comments stay with the song when it plays again.">COMMENT</button>
                             </div>
                             <div id="radiograph-comment-status" class="inline-status radiograph-status" aria-live="polite">Sign in to comment on the current broadcast.</div>
                         </div>
@@ -372,10 +373,10 @@
 
                     <section class="panel radiograph-panel radiograph-panel--queue" aria-labelledby="radiograph-queue-heading">
                         <div class="panel-heading-row">
-                            <h2 id="radiograph-queue-heading">Station Queue</h2>
+                            <h2 id="radiograph-queue-heading" data-help="See the next songs scheduled to play on the live station.">Station Queue</h2>
                             <span id="radiograph-queue-count" class="radiograph-stat-chip">syncing</span>
                         </div>
-                        <div id="radiograph-queue-list" class="radiograph-queue-list" aria-label="Upcoming station songs">
+                        <div id="radiograph-queue-list" class="radiograph-queue-list" aria-label="Upcoming station songs" data-help="See the next songs scheduled to play on the live station.">
                             <div class="radiograph-queue-item">
                                 <span class="radiograph-queue-index">--</span>
                                 <span>
@@ -397,29 +398,39 @@
                 <form id="station-mode-form" class="panel station-control-form">
                     <h3>RadioGraph Show</h3>
                     <label for="station-mode-select">Active show</label>
-                    <select id="station-mode-select" required disabled></select>
+                    <select id="station-mode-select" required disabled data-help="Choose which show the station should play."></select>
                     <label for="station-include-tags">Include tags</label>
-                    <input id="station-include-tags" type="text" aria-describedby="station-include-hint" disabled>
+                    <input id="station-include-tags" type="text" aria-describedby="station-include-hint" disabled data-help="Enter comma-separated tags. A song can match any one of them. Leave blank to include all tags.">
                     <small id="station-include-hint">Separate tags with commas. Songs can match any listed tag. Leave blank to include all tags.</small>
                     <label for="station-exclude-tags">Exclude tags</label>
-                    <input id="station-exclude-tags" type="text" aria-describedby="station-exclude-hint" disabled>
+                    <input id="station-exclude-tags" type="text" aria-describedby="station-exclude-hint" disabled data-help="Enter comma-separated tags to leave out. An excluded tag takes priority over an included tag.">
                     <small id="station-exclude-hint">Separate tags with commas. Any excluded tag takes priority.</small>
                     <div class="row">
-                        <button id="station-mode-save" class="button" type="submit" disabled>Change Show</button>
+                        <button id="station-mode-save" class="button" type="submit" disabled data-help="Save the show and its tag rules. The change starts with the next track.">Change Show</button>
                     </div>
                     <p id="station-mode-status" class="inline-status" role="status"></p>
                 </form>
                 <form id="station-news-form" class="panel station-control-form">
                     <h3>Recomposer News</h3>
                     <label for="station-news-title">Headline</label>
-                    <input id="station-news-title" type="text" maxlength="100" required disabled>
+                    <input id="station-news-title" type="text" maxlength="100" required disabled data-help="Write the title and message visitors will see on Recomposer.">
                     <label for="station-news-body">Announcement</label>
-                    <textarea id="station-news-body" maxlength="1600" rows="5" required disabled></textarea>
+                    <textarea id="station-news-body" maxlength="1600" rows="5" required disabled data-help="Write the title and message visitors will see on Recomposer."></textarea>
                     <div class="row">
-                        <button id="station-news-publish" class="button" type="submit" disabled>Publish News</button>
-                        <button id="station-news-remove" class="button" type="button" disabled>Remove News</button>
+                        <button id="station-news-publish" class="button" type="submit" disabled data-help="Show this announcement on Recomposer.">Publish News</button>
+                        <button id="station-news-remove" class="button" type="button" disabled data-help="Take the current announcement off Recomposer.">Remove News</button>
                     </div>
                     <p id="station-news-status" class="inline-status" role="status"></p>
+                </form>
+                <form id="station-midi-folder-form" class="panel station-control-form">
+                    <h3>Load MIDI File</h3>
+                    <label for="station-midi-folder">Default MIDI folder</label>
+                    <select id="station-midi-folder" aria-describedby="station-midi-folder-hint" disabled></select>
+                    <small id="station-midi-folder-hint">The Load MIDI File window opens in this folder. Visitors can still browse other folders or open their own MIDI files.</small>
+                    <div class="row">
+                        <button id="station-midi-folder-save" class="button" type="submit" disabled>Save Default Folder</button>
+                    </div>
+                    <p id="station-midi-folder-status" class="inline-status" role="status"></p>
                 </form>
             </div>
         </div>
@@ -428,17 +439,17 @@
     <div id="sample-modal" class="modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="sample-modal-title">
         <div class="modal__content">
             <h3 id="sample-modal-title">Load MIDI File</h3>
-            <label id="modal-load-button" class="button" for="midi-input">
+            <label id="modal-load-button" class="button" for="midi-input" data-help="Open a MIDI file from your computer or choose one from the Earchive library.">
                 Browse Computer
                 <input type="file" id="midi-input" accept=".mid,.midi">
             </label>
             <label for="sample-folder-select">or CHOOSE A FOLDER</label>
-            <select id="sample-folder-select"></select>
+            <select id="sample-folder-select" data-help="Choose a folder, select a MIDI file, then click Load to open it."></select>
             <label for="sample-midi-select">Choose a file</label>
-            <select id="sample-midi-select"></select>
+            <select id="sample-midi-select" data-help="Choose a folder, select a MIDI file, then click Load to open it."></select>
             <div class="row">
                 <button id="sample-cancel" type="button">Cancel</button>
-                <button id="sample-choose" type="button">Load</button>
+                <button id="sample-choose" type="button" data-help="Choose a folder, select a MIDI file, then click Load to open it.">Load</button>
             </div>
         </div>
     </div>
@@ -447,9 +458,9 @@
         <div class="modal__content">
             <h3 id="auth-modal-title">Account</h3>
             <label for="auth-email">Email</label>
-            <input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email">
+            <input id="auth-email" type="email" placeholder="you@example.com" autocomplete="email" data-help="Enter your email and send yourself a link. Open the link in your inbox to sign in.">
             <div class="row">
-                <button id="auth-sign-in" type="button">Send Sign-In Link</button>
+                <button id="auth-sign-in" type="button" data-help="Enter your email and send yourself a link. Open the link in your inbox to sign in.">Send Sign-In Link</button>
                 <button id="auth-sign-out" type="button" disabled>Sign Out</button>
                 <button id="auth-close" type="button">Close</button>
             </div>
@@ -474,13 +485,13 @@
         <div class="modal__content">
             <h3 id="save-arrangement-modal-title">Save Arrangement</h3>
             <label for="save-arrangement-name">Arrangement name</label>
-            <input id="save-arrangement-name" type="text" maxlength="120" placeholder="Arrangement name">
+            <input id="save-arrangement-name" type="text" maxlength="120" placeholder="Arrangement name" data-help="Use a new name to keep a separate version, or use an existing name to replace that saved version.">
             <label for="save-arrangement-tags">Tags (optional)</label>
-            <input id="save-arrangement-tags" type="text" maxlength="420" placeholder="e.g. Christmas, Jazz">
+            <input id="save-arrangement-tags" type="text" maxlength="420" placeholder="e.g. Christmas, Jazz" data-help="Add comma-separated tags such as Christmas or Jazz. An arrangement can have several tags, and the station uses them to decide which shows can play it.">
             <div id="save-arrangement-status" class="auth-status">Use an existing name to overwrite, or a new name to save separately.</div>
             <div class="row">
                 <button id="save-arrangement-cancel" type="button">Cancel</button>
-                <button id="save-arrangement-confirm" type="button">Save</button>
+                <button id="save-arrangement-confirm" type="button" data-help="Save the MIDI and its current settings, including keyframes, to your library.">Save</button>
             </div>
         </div>
     </div>
@@ -489,7 +500,7 @@
         <form class="modal__content">
             <h3 id="librarian-tags-heading">Edit Tags</h3>
             <label for="librarian-tags-input">Tags</label>
-            <input id="librarian-tags-input" type="text" maxlength="420" placeholder="e.g. Christmas, Jazz">
+            <input id="librarian-tags-input" type="text" maxlength="420" placeholder="e.g. Christmas, Jazz" data-help="Change the tags on the selected song. Separate tags with commas.">
             <div id="librarian-tags-status" class="auth-status" role="status"></div>
             <div class="row">
                 <button id="librarian-tags-cancel" type="button">Cancel</button>
