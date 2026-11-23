@@ -22,6 +22,7 @@ const playButton = document.getElementById("play");
 const pauseButton = document.getElementById("pause");
 const stopButton = document.getElementById("stop");
 const recordButton = document.getElementById("record");
+const recordButtonLabel = recordButton.textContent;
 const progressBar = document.getElementById("progress");
 const progressElapsed = document.getElementById("progress-elapsed");
 const progressRemaining = document.getElementById("progress-remaining");
@@ -7156,7 +7157,7 @@ async function stopRecordingSession(autoTriggered) {
     updateKeyframeControls();
     loopToggle.checked = previousLoopState;
     fluidRenderer.setLoopEnabled(loopToggle.checked);
-    recordButton.textContent = "RECORD TO DESKTOP";
+    recordButton.textContent = recordButtonLabel;
     recordButton.dataset.help = "Record the arrangement from the beginning and save it as an audio file.";
     if (helpTarget === recordButton) showControlHelp(recordButton);
     recordButton.classList.remove("recording");

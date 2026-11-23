@@ -1061,11 +1061,12 @@ textarea:disabled {
 }
 
 #save-arrangement.action-button {
-    background: #ffb000;
+    background: #a02a2a;
 }
 
 #record.action-button {
-    background: #a02a2a;
+    background: #ffb000;
+    color: #3b2b00;
 }
 
 .button {
@@ -2843,6 +2844,14 @@ h3 {
 }
 
 @media (max-width: 480px) {
+    #record.action-button {
+        padding-inline: 2px;
+        font-size: 0.65rem;
+        line-height: 1.15;
+        letter-spacing: 0;
+        overflow-wrap: anywhere;
+    }
+
     .audio-launch-hint {
         width: max-content;
         max-width: calc(50vw - 60px);
