@@ -3,15 +3,24 @@
     --ink: #d8dde4;
     --ink-soft: #a5adb8;
     --paper: #2b2f34;
-    --panel: #565c66;
+    --site-background: #a3b9ad;
+    --site-background-ink: #293c33;
+    --panel: color-mix(in srgb, var(--site-background) 75%, #3f4d45);
+    --panel-inset: color-mix(in srgb, var(--site-background) 75%, #37443c);
+    --panel-deep: color-mix(in srgb, var(--site-background) 75%, #303c35);
+    --panel-ink: #ffffff;
+    --panel-letter-shadow: -1px 0 #354037, 1px 0 #354037, 0 -1px #354037,
+        0 1px #354037, 0 -1.5px 1px rgba(20, 29, 23, 0.65), 0 2.5px 2px rgba(239, 255, 245, 0.6);
     --panel-border: #7f8792;
+    --panel-recess: inset 3px 4px 10px rgba(29, 46, 36, 0.34),
+        inset -1px -2px 4px rgba(244, 255, 248, 0.34);
     --accent: #ffb000;
     --help-yellow: #b5a068;
     --accent-dark: #dd8f00;
     --accent-soft: rgba(255, 176, 0, 0.2);
     --shadow: 0 18px 45px rgba(0, 0, 0, 0.08);
-    --radius: 0;
-    --radius-tight: 0;
+    --radius: 20px;
+    --radius-tight: 12px;
     --title-row-height: 48px;
     --title-core-width: min(80vw, 760px);
     --title-font: "Cinzel", "Palatino Linotype", "Book Antiqua", serif;
@@ -27,7 +36,7 @@
 body {
     margin: 0;
     font-family: var(--body-font);
-    background: linear-gradient(180deg, #34383e 0%, #2c3036 100%);
+    background: var(--site-background);
     color: #f0f2f4;
     min-height: 100vh;
 }
@@ -209,7 +218,7 @@ textarea:disabled {
     order: 1;
     font-size: 0.58rem;
     letter-spacing: 0.03em;
-    color: var(--ink-soft);
+    color: var(--site-background-ink);
     line-height: 1.15;
     max-width: 140px;
     overflow-wrap: anywhere;
@@ -327,7 +336,8 @@ textarea:disabled {
     border: 2px solid #bcc2ca;
     border-radius: 0;
     overflow: hidden;
-    background: #444b54;
+    background: #35433c;
+    box-shadow: 0 3px 5px rgba(26, 42, 33, 0.26);
 }
 
 .has-station-control .app-tabs {
@@ -337,15 +347,21 @@ textarea:disabled {
 .tab {
     border: 0;
     border-right: 1px solid #bcc2ca;
-    background: #4a515a;
-    color: #c8ced6;
+    background: linear-gradient(180deg, #a2b3aa, #6a7a72 18%, #4b5a53 48%, #34423b 80%, #25312b);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.35), inset 0 -1px rgba(15, 23, 19, 0.45);
+    color: #edf3ef;
     padding: 6px 14px;
     border-radius: 0;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     font-size: 0.72rem;
     cursor: pointer;
-    transition: background-color 0.2s ease, color 0.2s ease;
+    transition: color 0.2s ease;
+}
+
+.tab:focus-visible {
+    outline: 2px solid #ffcf68;
+    outline-offset: -3px;
 }
 
 .tab:last-child,
@@ -354,9 +370,8 @@ textarea:disabled {
 }
 
 .tab.is-active {
-    background: #d4dae1;
-    color: #1f242b;
-    box-shadow: none;
+    background: linear-gradient(180deg, #f3fff6, #dce9df 18%, #bdcec4 48%, #94a99e 80%, #71847a);
+    color: #17271f;
 }
 
 .tab:disabled {
@@ -507,13 +522,38 @@ textarea:disabled {
     grid-template-columns: minmax(0, 0.45fr) minmax(0, 0.55fr);
 }
 
+.panel,
+.librarian-hero,
+.librarian-player,
+.radiograph-hero {
+    color: var(--panel-ink);
+    text-shadow: var(--panel-letter-shadow);
+}
+
+:is(.panel, .librarian-player, .librarian-hero, .radiograph-hero) :is(button, input, select, textarea) {
+    text-shadow: none;
+}
+
 .panel {
     background: var(--panel);
     border: 1px solid var(--panel-border);
     padding: 14px 16px;
     border-radius: var(--radius);
-    box-shadow: var(--shadow);
+    box-shadow: var(--panel-recess);
     animation: rise 0.35s ease both;
+}
+
+.panel h2,
+.panel h3,
+.panel .inline-status,
+.librarian-player .inline-status {
+    color: var(--panel-ink);
+}
+
+.panel .inline-status.error,
+.librarian-player .inline-status.error {
+    color: #220503;
+    text-shadow: none;
 }
 
 .panel.compact {
@@ -527,8 +567,7 @@ textarea:disabled {
 }
 
 .panel.subpanel {
-    background: #4b515a;
-    box-shadow: none;
+    background: var(--panel-inset);
     border-style: dashed;
 }
 
@@ -548,11 +587,13 @@ textarea:disabled {
 }
 
 #song-panel #song-display {
-    background: #2d333b;
+    background: var(--panel-deep);
     border: 1px solid #6f7783;
-    color: #f3f6fb;
-    border-radius: 0;
+    color: var(--panel-ink);
+    text-shadow: var(--panel-letter-shadow);
+    border-radius: var(--radius-tight);
     padding: 12px;
+    box-shadow: var(--panel-recess);
 }
 
 .status-panel {
@@ -708,7 +749,7 @@ textarea:disabled {
     font-size: 0.68rem;
     font-weight: 700;
     letter-spacing: 0.05em;
-    color: #e7ebf0;
+    color: var(--panel-ink);
 }
 
 .transport-progress-row {
@@ -792,7 +833,7 @@ textarea:disabled {
     align-items: center;
     gap: 4px 8px;
     min-height: 22px;
-    color: #eef1f4;
+    color: var(--panel-ink);
     font-size: 0.7rem;
 }
 
@@ -863,7 +904,7 @@ textarea:disabled {
     align-items: center;
     font-size: 0.62rem;
     font-weight: 700;
-    color: #d8e9ff;
+    color: var(--panel-ink);
     letter-spacing: 0.03em;
 }
 
@@ -897,7 +938,7 @@ textarea:disabled {
     font-size: 0.87rem;
     font-weight: 700;
     letter-spacing: 0.05em;
-    color: #e7ebf0;
+    color: var(--panel-ink);
 }
 
 .transport-meta-control input[type="number"] {
@@ -944,7 +985,7 @@ textarea:disabled {
     font-size: 0.87rem;
     font-weight: 700;
     letter-spacing: 0.05em;
-    color: #e7ebf0;
+    color: var(--panel-ink);
 }
 
 .transport-tuning-selects {
@@ -1116,8 +1157,9 @@ h3 {
     padding: 6px 7px;
     display: grid;
     gap: 4px;
-    background: #3a3f47;
+    background: var(--panel-inset);
     font-weight: 700;
+    box-shadow: var(--panel-recess);
 }
 
 .track-meter {
@@ -1145,7 +1187,7 @@ h3 {
     height: 100%;
     padding: 0 7px;
     font-size: 0.66rem;
-    color: #d6dbe2;
+    color: var(--panel-ink);
     letter-spacing: 0.02em;
 }
 
@@ -1324,7 +1366,7 @@ h3 {
 
 .track-row.is-active {
     border-color: var(--accent);
-    box-shadow: 0 8px 20px rgba(225, 106, 27, 0.12);
+    box-shadow: var(--panel-recess), 0 8px 20px rgba(225, 106, 27, 0.12);
 }
 
 .modal {
@@ -1612,10 +1654,13 @@ h3 {
 .librarian-hero {
     padding: 18px 20px;
     border: 1px solid #7f8792;
-    background: #3a4048;
+    background: var(--panel-deep);
+    border-radius: var(--radius);
+    box-shadow: var(--panel-recess);
 }
 
 .librarian-hero h2 {
+    color: var(--panel-ink);
     font-family: var(--title-font);
     font-size: clamp(1.3rem, 2.4vw, 2rem);
     letter-spacing: 0.08em;
@@ -1624,7 +1669,7 @@ h3 {
 .librarian-lede {
     margin: 0;
     max-width: 700px;
-    color: #c9d0da;
+    color: var(--panel-ink);
     font-size: 0.92rem;
 }
 
@@ -1651,8 +1696,9 @@ h3 {
     align-items: center;
     padding: 14px 16px;
     border: 1px solid #7f8792;
-    background: #4b515a;
-    box-shadow: var(--shadow);
+    background: var(--panel-inset);
+    border-radius: var(--radius);
+    box-shadow: var(--panel-recess);
 }
 
 .librarian-player__art {
@@ -1695,7 +1741,7 @@ h3 {
 .librarian-kicker {
     display: block;
     margin-bottom: 4px;
-    color: #aeb8c5;
+    color: var(--panel-ink);
     font-size: 0.68rem;
     font-weight: 800;
     letter-spacing: 0.08em;
@@ -1705,13 +1751,13 @@ h3 {
 .librarian-player__meta h3 {
     margin-bottom: 4px;
     font-size: 1.28rem;
-    color: #f5f8fb;
+    color: var(--panel-ink);
     text-transform: none;
 }
 
 .librarian-player__meta p {
     margin: 0;
-    color: #c6ced8;
+    color: var(--panel-ink);
     font-size: 0.84rem;
 }
 
@@ -1875,7 +1921,8 @@ h3 {
 .queue-item__title {
     display: block;
     overflow: hidden;
-    color: #f1f4f7;
+    color: var(--panel-ink);
+    text-shadow: var(--panel-letter-shadow);
     font-size: 0.86rem;
     font-weight: 800;
     text-overflow: ellipsis;
@@ -1887,7 +1934,8 @@ h3 {
 .queue-item__meta {
     display: block;
     margin-top: 2px;
-    color: #aeb8c5;
+    color: var(--panel-ink);
+    text-shadow: var(--panel-letter-shadow);
     font-size: 0.68rem;
     font-weight: 700;
 }
@@ -1965,7 +2013,7 @@ h3 {
 
 .queue-repeat-note {
     margin: -2px 0 10px;
-    color: #aeb8c5;
+    color: var(--panel-ink);
     font-size: 0.68rem;
     font-weight: 800;
     letter-spacing: 0.04em;
@@ -2233,13 +2281,22 @@ h3 {
 .playlist-empty {
     padding: 18px 12px;
     border: 1px dashed #87909d;
-    color: #c0c8d3;
+    color: var(--panel-ink);
     text-align: center;
     font-size: 0.82rem;
 }
 
 .librarian-status {
     margin-top: -6px;
+}
+
+#librarian-status:not(.error),
+#station-control-heading {
+    color: var(--site-background-ink);
+}
+
+#librarian-status.error {
+    color: #70241f;
 }
 
 #librarian-edit-tags {
@@ -2288,6 +2345,10 @@ h3 {
     margin: 0;
 }
 
+.station-control-form .button {
+    color: #452218;
+}
+
 .station-control-form textarea {
     resize: vertical;
 }
@@ -2304,12 +2365,14 @@ h3 {
     margin-bottom: 16px;
     padding: 18px;
     border: 1px solid #7f8792;
-    background: #3a4048;
+    background: var(--panel-deep);
+    border-radius: var(--radius);
+    box-shadow: var(--panel-recess);
 }
 
 .radiograph-hero h2 {
     margin: 0;
-    color: #f1f4f7;
+    color: var(--panel-ink);
     font-family: var(--title-font);
     font-size: clamp(1.5rem, 2.6vw, 2.1rem);
     letter-spacing: 0.04em;
@@ -2319,7 +2382,7 @@ h3 {
 .radiograph-lede,
 .radiograph-panel-copy {
     margin: 6px 0 0;
-    color: #c6ced8;
+    color: var(--panel-ink);
     font-size: 0.86rem;
     line-height: 1.45;
 }
@@ -2536,14 +2599,14 @@ h3 {
 
 .radiograph-now-card h3 {
     margin: 6px 0 3px;
-    color: #f1f4f7;
+    color: var(--panel-ink);
     font-size: 1.26rem;
     letter-spacing: 0;
 }
 
 .radiograph-now-card p,
 .radiograph-draft-summary {
-    color: #c6ced8;
+    color: var(--panel-ink);
     font-size: 0.82rem;
     line-height: 1.42;
 }
@@ -2603,7 +2666,7 @@ h3 {
 }
 
 .radiograph-comment-empty {
-    color: #aeb8c5;
+    color: var(--panel-ink);
     font-size: 0.76rem;
 }
 
@@ -2617,7 +2680,7 @@ h3 {
 
 .radiograph-comment-text {
     margin-top: 4px;
-    color: #f1f4f7;
+    color: var(--panel-ink);
     font-size: 0.8rem;
     line-height: 1.35;
     overflow-wrap: anywhere;
@@ -2709,7 +2772,7 @@ h3 {
 .radiograph-queue-title {
     display: block;
     overflow: hidden;
-    color: #f1f4f7;
+    color: var(--panel-ink);
     font-size: 0.88rem;
     font-weight: 800;
     text-overflow: ellipsis;
@@ -2719,7 +2782,7 @@ h3 {
 .radiograph-queue-meta {
     display: block;
     margin-top: 2px;
-    color: #aeb8c5;
+    color: var(--panel-ink);
     font-size: 0.68rem;
     font-weight: 700;
 }
@@ -2729,7 +2792,7 @@ h3 {
     grid-template-columns: minmax(0, 1fr) 120px;
     gap: 12px;
     align-items: center;
-    color: #f1f4f7;
+    color: var(--panel-ink);
     font-size: 0.82rem;
     font-weight: 800;
 }
@@ -2747,7 +2810,7 @@ h3 {
 
 .radiograph-popularity-meta {
     margin-top: 2px;
-    color: #aeb8c5;
+    color: var(--panel-ink);
     font-size: 0.68rem;
     font-weight: 700;
 }
