@@ -2310,6 +2310,12 @@ h3 {
     background: transparent;
 }
 
+.arrangement-tag-hint {
+    display: block;
+    margin-top: 5px;
+    color: #dfe5ec;
+}
+
 .librarian-tags-dialog::backdrop {
     background: rgba(0, 0, 0, 0.55);
 }
@@ -2531,6 +2537,14 @@ h3 {
     border-bottom: 11px solid transparent;
     border-left: 19px solid #2fbc4d;
     transform: translateY(-50%);
+}
+
+.radiograph-control--play.is-playing::before {
+    left: 14px;
+    width: 18px;
+    height: 20px;
+    border: 0;
+    border-inline: 5px solid #2fbc4d;
 }
 
 .radiograph-control--mute::before {

@@ -85,7 +85,7 @@
                         <section id="controls-panel" class="recomposer-block panel-transport">
                             <div class="transport-shapes" role="group" aria-label="Transport controls">
                                 <button id="rewind" class="transport-shape transport-shape--rewind" type="button" aria-label="Rewind to Beginning" disabled data-help="Rewind to beginning. Playback continues if it was already running."></button>
-                                <button id="play" class="transport-shape transport-shape--play" type="button" aria-label="Play" disabled data-help="Play from the current position, including a keyframe you just edited."></button>
+                                <button id="play" class="transport-shape transport-shape--play" type="button" aria-label="Play" aria-keyshortcuts="Space" disabled data-help="Play from the current position, including a keyframe you just edited."></button>
                                 <button id="pause" class="transport-shape transport-shape--pause" type="button" aria-label="Pause" disabled data-help="Stops Playback keeping position in song."></button>
                                 <button id="stop" class="transport-shape transport-shape--stop" type="button" aria-label="Stop" disabled data-help="Stop playback and return to the beginning."></button>
                             </div>
@@ -242,7 +242,7 @@
                         <h2 id="queue-heading">Queue</h2>
                         <div class="queue-transport-controls" role="group" aria-label="Queue transport">
                             <button id="queue-previous" class="queue-transport-button queue-transport-button--previous" type="button" aria-label="Previous song" data-hint="←" data-help="Press once to restart this song. Press again quickly to go to the previous song."></button>
-                            <button id="queue-play-toggle" class="queue-transport-button queue-transport-button--play" type="button" aria-label="Play queue" data-hint="spacebar" data-help="Start or pause the playlist queue. The spacebar also works."></button>
+                            <button id="queue-play-toggle" class="queue-transport-button queue-transport-button--play" type="button" aria-label="Play queue" aria-keyshortcuts="Space" data-hint="spacebar" data-help="Start or pause the playlist queue. The spacebar also works."></button>
                             <button id="queue-next" class="queue-transport-button queue-transport-button--next" type="button" aria-label="Next song" data-hint="→" data-help="Skip to the next song in the queue."></button>
                             <button id="queue-shuffle-toggle" class="queue-transport-button queue-transport-button--play-next" type="button" aria-label="Play next mode" aria-pressed="false" data-hint="Play Next / Shuffle" data-help="Switch between playing the queue in order and choosing the next song at random."></button>
                         </div>
@@ -299,7 +299,7 @@
                         </div>
                         <audio id="radiograph-audio" preload="none" crossorigin="anonymous"></audio>
                         <div class="radiograph-station-controls" role="group" aria-label="Radio controls">
-                            <button id="radiograph-play" class="radiograph-control radiograph-control--play" type="button" aria-label="Play live radio" data-help="Join the station at its current point in the broadcast."></button>
+                            <button id="radiograph-play" class="radiograph-control radiograph-control--play" type="button" aria-label="Play live radio" aria-keyshortcuts="Space" data-help="Play or pause live radio. Press Space to toggle playback. When you resume, you rejoin the live broadcast."></button>
                             <button id="radiograph-mute" class="radiograph-control radiograph-control--mute" type="button" aria-label="Mute live radio" aria-pressed="false" data-help="Silence the live stream. Unmute to hear what’s playing then."></button>
                             <button id="radiograph-reconnect" class="radiograph-control radiograph-control--reconnect" type="button" aria-label="Reconnect live radio" data-help="Reconnect if the stream stalls or falls behind."></button>
                         </div>
@@ -432,6 +432,19 @@
                     </div>
                     <p id="station-midi-folder-status" class="inline-status" role="status"></p>
                 </form>
+                <form id="station-folder-tag-form" class="panel station-control-form">
+                    <h3>Default Arrangement Tags</h3>
+                    <label for="station-tag-folder">MIDI folder</label>
+                    <select id="station-tag-folder" required disabled></select>
+                    <label for="station-folder-tag">Default tag</label>
+                    <input id="station-folder-tag" type="text" maxlength="80" list="station-shared-tags" aria-describedby="station-folder-tag-hint" disabled>
+                    <datalist id="station-shared-tags"></datalist>
+                    <small id="station-folder-tag-hint">Choose a shared tag or type a new one. Leave blank to clear the default for this folder.</small>
+                    <div class="row">
+                        <button id="station-folder-tag-save" class="button" type="submit" disabled>Save Folder Tag</button>
+                    </div>
+                    <p id="station-folder-tag-status" class="inline-status" role="status"></p>
+                </form>
             </div>
         </div>
     </section>
@@ -487,7 +500,9 @@
             <label for="save-arrangement-name">Arrangement name</label>
             <input id="save-arrangement-name" type="text" maxlength="120" placeholder="Arrangement name" data-help="Use a new name to keep a separate version, or use an existing name to replace that saved version.">
             <label for="save-arrangement-tags">Tags (optional)</label>
-            <input id="save-arrangement-tags" type="text" maxlength="420" placeholder="e.g. Christmas, Jazz" data-help="Add comma-separated tags such as Christmas or Jazz. An arrangement can have several tags, and the station uses them to decide which shows can play it.">
+            <input id="save-arrangement-tags" list="save-arrangement-shared-tags" aria-describedby="save-arrangement-tags-hint" type="text" maxlength="420" placeholder="e.g. Christmas, Jazz" data-help="Add comma-separated tags such as Christmas or Jazz. An arrangement can have several tags, and the station uses them to decide which shows can play it.">
+            <datalist id="save-arrangement-shared-tags"></datalist>
+            <small id="save-arrangement-tags-hint" class="arrangement-tag-hint">Choose a shared tag or type a new one. Separate multiple tags with commas. New tags are shared when saved.</small>
             <div id="save-arrangement-status" class="auth-status">Use an existing name to overwrite, or a new name to save separately.</div>
             <div class="row">
                 <button id="save-arrangement-cancel" type="button">Cancel</button>
@@ -500,7 +515,9 @@
         <form class="modal__content">
             <h3 id="librarian-tags-heading">Edit Tags</h3>
             <label for="librarian-tags-input">Tags</label>
-            <input id="librarian-tags-input" type="text" maxlength="420" placeholder="e.g. Christmas, Jazz" data-help="Change the tags on the selected song. Separate tags with commas.">
+            <input id="librarian-tags-input" list="librarian-shared-tags" aria-describedby="librarian-tags-input-hint" type="text" maxlength="420" placeholder="e.g. Christmas, Jazz" data-help="Change the tags on the selected song. Separate tags with commas.">
+            <datalist id="librarian-shared-tags"></datalist>
+            <small id="librarian-tags-input-hint" class="arrangement-tag-hint">Choose a shared tag or type a new one. Separate multiple tags with commas. New tags are shared when saved.</small>
             <div id="librarian-tags-status" class="auth-status" role="status"></div>
             <div class="row">
                 <button id="librarian-tags-cancel" type="button">Cancel</button>

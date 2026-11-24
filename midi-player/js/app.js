@@ -124,6 +124,14 @@ const stationMidiFolderForm = document.getElementById("station-midi-folder-form"
 const stationMidiFolder = document.getElementById("station-midi-folder");
 const stationMidiFolderSave = document.getElementById("station-midi-folder-save");
 const stationMidiFolderStatus = document.getElementById("station-midi-folder-status");
+const stationFolderTagForm = document.getElementById("station-folder-tag-form");
+const stationTagFolder = document.getElementById("station-tag-folder");
+const stationFolderTag = document.getElementById("station-folder-tag");
+const stationFolderTagSave = document.getElementById("station-folder-tag-save");
+const stationFolderTagStatus = document.getElementById("station-folder-tag-status");
+let folderTags = new Map();
+let sharedArrangementTags = [];
+let saveArrangementTagRequest = 0;
 const recomposerNews = document.getElementById("recomposer-news");
 const recomposerNewsHeading = document.getElementById("recomposer-news-heading");
 const recomposerNewsBody = document.getElementById("recomposer-news-body");
@@ -329,6 +337,7 @@ function setRadiographLiveState(state) {
     }
     if (radiographPlayButton) {
         radiographPlayButton.classList.toggle("is-playing", isLive);
+        radiographPlayButton.setAttribute("aria-label", isLive ? "Pause live radio" : "Play live radio");
     }
     if (!isLive) {
         stopRadiographVolumeMeter();
@@ -944,7 +953,7 @@ function normalizeArrangementTags(value) {
     const tags = new Map();
     for (const part of parts) {
         if (typeof part !== "string") continue;
-        const tag = part.trim().slice(0, 40);
+        const tag = Array.from(part.trim()).slice(0, 40).join("");
         const key = tag.toLowerCase();
         if (tag && !tags.has(key)) tags.set(key, tag);
         if (tags.size === 10) break;
@@ -956,6 +965,55 @@ function getArrangementTags(record) {
     const meta = record?.midi_meta || record;
     if (!meta) return [];
     return normalizeArrangementTags(Array.isArray(meta.tags) ? meta.tags : [meta.category]);
+}
+
+async function loadSharedArrangementTags() {
+    if (!supabaseClient) return;
+    const tags = [];
+    const pageSize = 500;
+    for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await supabaseClient
+            .from("earb_arrangement_tags")
+            .select("tag")
+            .order("tag_key")
+            .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        tags.push(...data.map(row => row.tag));
+        if (data.length < pageSize) break;
+    }
+    sharedArrangementTags = tags;
+    updateSharedTagOptions(stationFolderTag);
+    updateSharedTagOptions(saveArrangementTagsInput);
+    updateSharedTagOptions(librarianTagsInput);
+}
+
+function updateSharedTagOptions(input) {
+    const comma = input === stationFolderTag ? -1 : input.value.lastIndexOf(",");
+    const previous = input.value.slice(0, comma + 1);
+    const current = input.value.slice(comma + 1);
+    const prefix = previous + current.match(/^\s*/)[0];
+    const selected = new Set(normalizeArrangementTags(previous).map(tag => tag.toLowerCase()));
+    const search = current.trim().toLowerCase();
+    input.list.replaceChildren(...sharedArrangementTags
+        .filter(tag => !selected.has(tag.toLowerCase()) && tag.toLowerCase().includes(search))
+        .slice(0, 100)
+        .map(tag => new Option(tag, prefix + tag)));
+}
+
+function getMidiSourceFolder(source) {
+    const folder = source?.folder ?? includedMidiFolders.get(source?.sample_id);
+    if (folder === "" || (folder == null && source?.source_type === "sample")) return ".";
+    return folder ?? null;
+}
+
+async function readMidiFolderTag(folder) {
+    const { data, error } = await supabaseClient
+        .from("earb_midi_folder_tags")
+        .select("earb_arrangement_tags(tag)")
+        .eq("folder", folder)
+        .maybeSingle();
+    if (error) throw error;
+    return data?.earb_arrangement_tags?.tag ?? "";
 }
 
 function getRadioTagFilters(mode) {
@@ -1233,14 +1291,29 @@ async function playRadiographStream() {
     }
     try {
         await radiographAudio.play();
+        if (radiographAudio.paused) return;
         startRadiographVolumeMeter();
         setRadiographStatus("Live radio is playing.");
         setRadiographLiveState("live");
     } catch (error) {
+        if (error?.name === "AbortError" && radiographAudio.paused) return;
         console.warn("Radio stream playback failed:", error);
         setRadiographStatus("Browser blocked or lost the live stream. Use reconnect after audio is allowed.", true);
         setRadiographLiveState("error");
     }
+}
+
+function toggleRadiographPlayback() {
+    if (!radiographAudio || radiographAudio.paused) {
+        playRadiographStream();
+        return;
+    }
+    clearTimeout(radiographRecoveryTimer);
+    radiographRecoveryTimer = null;
+    radiographAudio.pause();
+    radiographHls?.stopLoad();
+    setRadiographStatus("Live radio paused.");
+    setRadiographLiveState("standby");
 }
 
 function reconnectRadiographStream(message = "Reconnecting live radio...") {
@@ -1892,6 +1965,8 @@ librarianEditTags.addEventListener("click", () => {
     librarianTagsInput.value = getArrangementTags(item.record).join(", ");
     librarianTagsStatus.textContent = `Tags for “${item.title}”. Separate tags with commas.`;
     librarianTagsDialog.showModal();
+    updateSharedTagOptions(librarianTagsInput);
+    loadSharedArrangementTags().catch(error => console.warn("Could not load shared arrangement tags:", error));
 });
 
 document.getElementById("librarian-tags-cancel").addEventListener("click", () => {
@@ -2402,16 +2477,29 @@ function isTextEntryTarget(target) {
 }
 
 function handleGlobalPlaybackKeys(event) {
-    if (infoBubbles.open || (event.target instanceof Element && event.target.closest("#info-toggle, #rewind, .track-mix__button"))) return;
-    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || isTextEntryTarget(event.target)) {
-        return;
-    }
-    if (event.code === "Space") {
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey
+        || event.isComposing || isTextEntryTarget(event.target)) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (event.code === "Space" || event.key === " ") {
+        if (event.shiftKey || document.querySelector("dialog[open], .modal:not(.is-hidden)")) return;
+        const button = target?.closest("button, a[href], [role='button']");
+        if (button?.matches(":focus-visible") && !button.matches(
+            "#play, #pause, #librarian-play, #librarian-pause, .tab.is-active, .library-item.is-active, .playlist-item.is-active"
+        )) return;
+
+        const page = pageViews.find(view => view.classList.contains("is-active"))?.dataset.pageView;
+        if (page !== "recomposer" && page !== "librarian" && page !== "radiograph") return;
         event.preventDefault();
-        flashQueueTransportButton(queuePlayToggleButton);
-        triggerQueuePlayToggle();
+        if (event.repeat) return;
+        if (page === "radiograph") {
+            toggleRadiographPlayback();
+        } else if (!recordingActive) {
+            if (page === "librarian") queuePlayToggleButton.click();
+            else (isPlaying ? pauseButton : playButton).click();
+        }
         return;
     }
+    if (infoBubbles.open || target?.closest("#info-toggle, #rewind, .track-mix__button")) return;
     if (event.code === "ArrowLeft") {
         event.preventDefault();
         flashQueueTransportButton(queuePreviousButton);
@@ -2557,13 +2645,7 @@ if (librarianCommentInput) {
 }
 
 if (radiographPlayButton) {
-    radiographPlayButton.addEventListener("click", () => {
-        if (radiographAudio && !radiographAudio.paused) {
-            setRadiographStatus("Live radio is already playing. Use mute or reconnect for recovery.");
-            return;
-        }
-        playRadiographStream();
-    });
+    radiographPlayButton.addEventListener("click", toggleRadiographPlayback);
 }
 
 if (radiographMuteButton) {
@@ -3033,6 +3115,7 @@ async function loadStationControl() {
     const userId = stationOperatorId;
     if (!userId) return;
     loadStationMidiFolder(userId);
+    loadStationFolderTags(userId);
     stationModeSelect.disabled = true;
     stationIncludeTags.disabled = true;
     stationExcludeTags.disabled = true;
@@ -3195,6 +3278,93 @@ stationMidiFolderForm.addEventListener("submit", async event => {
         if (stationOperatorId === userId) {
             stationMidiFolder.disabled = false;
             stationMidiFolderSave.disabled = false;
+        }
+    }
+});
+
+function showStationFolderTag() {
+    stationFolderTag.value = folderTags.get(stationTagFolder.value) || "";
+    updateSharedTagOptions(stationFolderTag);
+    stationFolderTagStatus.textContent = "";
+}
+
+stationTagFolder.addEventListener("change", showStationFolderTag);
+for (const input of [stationFolderTag, saveArrangementTagsInput, librarianTagsInput]) {
+    input.addEventListener("input", () => updateSharedTagOptions(input));
+    input.addEventListener("focus", () => updateSharedTagOptions(input));
+}
+
+async function loadStationFolderTags(userId) {
+    stationTagFolder.disabled = true;
+    stationFolderTag.disabled = true;
+    stationFolderTagSave.disabled = true;
+    stationFolderTagStatus.textContent = "Loading MIDI folder tags…";
+    try {
+        const [manifest, rules] = await Promise.all([
+            loadSampleManifest(),
+            supabaseClient.from("earb_midi_folder_tags").select("folder,earb_arrangement_tags(tag)"),
+            loadSharedArrangementTags()
+        ]);
+        if (stationOperatorId !== userId) return;
+        if (rules.error) throw rules.error;
+        if (!manifest) throw new Error("The included MIDI folders could not be loaded.");
+        const previous = stationTagFolder.value;
+        const options = Array.from(sampleFolderSelect.options)
+            .filter(option => option.value !== "__all__")
+            .map(option => new Option(option.textContent, option.value === "__root__" ? "." : option.value));
+        stationTagFolder.replaceChildren(...options);
+        if (!options.length) throw new Error("There are no MIDI folders to configure.");
+        if (options.some(option => option.value === previous)) stationTagFolder.value = previous;
+        folderTags = new Map(rules.data.map(row => [row.folder, row.earb_arrangement_tags?.tag]));
+        showStationFolderTag();
+        stationTagFolder.disabled = false;
+        stationFolderTag.disabled = false;
+        stationFolderTagSave.disabled = false;
+    } catch (error) {
+        if (stationOperatorId === userId) {
+            stationFolderTagStatus.textContent = error?.message || "Could not load default folder tags.";
+        }
+    }
+}
+
+stationFolderTagForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const userId = stationOperatorId;
+    const folder = stationTagFolder.value;
+    if (!userId || !folder || stationFolderTagSave.disabled) return;
+    const tag = stationFolderTag.value.trim();
+    if (Array.from(tag).length > 40 || tag.includes(",")) {
+        stationFolderTagStatus.textContent = "Enter one tag of up to 40 characters.";
+        return;
+    }
+    stationTagFolder.disabled = true;
+    stationFolderTag.disabled = true;
+    stationFolderTagSave.disabled = true;
+    stationFolderTagStatus.textContent = "Saving the folder tag…";
+    try {
+        const { data, error } = await supabaseClient.rpc("earb_station_set_folder_tag", {
+            folder_name: folder,
+            default_tag: tag || null
+        });
+        if (error) throw error;
+        if (stationOperatorId !== userId) return;
+        if (data) folderTags.set(folder, data);
+        else folderTags.delete(folder);
+        showStationFolderTag();
+        const label = stationTagFolder.selectedOptions[0].textContent;
+        stationFolderTagStatus.textContent = data
+            ? `${label} now suggests “${data}”.`
+            : `Default tag cleared for ${label}.`;
+        loadSharedArrangementTags().catch(error => console.warn("Could not refresh shared arrangement tags:", error));
+    } catch (error) {
+        if (stationOperatorId === userId) {
+            stationFolderTagStatus.textContent = error?.message || "Could not save the folder tag.";
+        }
+    } finally {
+        if (stationOperatorId === userId) {
+            stationTagFolder.disabled = false;
+            stationFolderTag.disabled = false;
+            stationFolderTagSave.disabled = false;
         }
     }
 });
@@ -3417,7 +3587,7 @@ function setSaveArrangementStatus(message, isError = false) {
     saveArrangementStatus.classList.toggle("error", Boolean(isError));
 }
 
-function showSaveArrangementModal(defaultName = "") {
+async function showSaveArrangementModal(defaultName = "") {
     if (!saveArrangementModal) {
         return;
     }
@@ -3427,16 +3597,41 @@ function showSaveArrangementModal(defaultName = "") {
         saveArrangementNameInput.focus();
         saveArrangementNameInput.select();
     }
-    const folder = currentMidiSource?.folder;
-    const suggestedTag = folder?.split("/")[0]?.replace(/^\d+\s+/, "");
-    saveArrangementTagsInput.value = (currentMidiSource?.tags ?? (suggestedTag ? [suggestedTag] : [])).join(", ");
-    setSaveArrangementStatus("Use an existing name to overwrite, or a new name to save separately.", false);
+    const request = ++saveArrangementTagRequest;
+    const source = currentMidiSource;
+    const tags = Array.isArray(source?.tags) ? source.tags : null;
+    const folder = getMidiSourceFolder(source);
+    const status = "Use an existing name to overwrite, or a new name to save separately.";
+    saveArrangementTagsInput.value = tags?.join(", ") || "";
+    setSaveArrangementStatus(status, false);
+    updateSharedTagOptions(saveArrangementTagsInput);
+    loadSharedArrangementTags().catch(error => console.warn("Could not load shared arrangement tags:", error));
+    saveArrangementConfirmButton.disabled = false;
+    if (tags || !folder) return;
+    let edited = false;
+    const markEdited = () => { edited = true; };
+    saveArrangementTagsInput.addEventListener("input", markEdited, { once: true });
+    saveArrangementConfirmButton.disabled = true;
+    try {
+        const defaultTag = await withTimeout(readMidiFolderTag(folder), CLOUD_SAVE_TIMEOUT_MS, "The default folder tag could not be loaded.");
+        if (request !== saveArrangementTagRequest || source !== currentMidiSource) return;
+        if (!edited && defaultTag) {
+            saveArrangementTagsInput.value = defaultTag;
+            updateSharedTagOptions(saveArrangementTagsInput);
+        }
+    } catch (error) {
+        if (request === saveArrangementTagRequest) setSaveArrangementStatus(`${status} The default folder tag could not be loaded.`, false);
+    } finally {
+        saveArrangementTagsInput.removeEventListener("input", markEdited);
+        if (request === saveArrangementTagRequest) saveArrangementConfirmButton.disabled = false;
+    }
 }
 
 function hideSaveArrangementModal() {
     if (!saveArrangementModal) {
         return;
     }
+    saveArrangementTagRequest++;
     saveArrangementModal.classList.add("is-hidden");
 }
 
@@ -4775,18 +4970,17 @@ bootstrapPromise = bootstrapApp().catch((error) => {
     throw error;
 });
 
-async function loadMidiFromBuffer(buffer, displayName = "MIDI file", source = null) {
+async function loadMidiFromBuffer(buffer, displayName = "MIDI file", source = null, selectionToken = ++latestSelectionToken) {
+    if (selectionToken !== latestSelectionToken) return false;
     await ensureAudioReady().catch((error) => {
         console.warn("Audio context not ready yet:", error);
     });
-    const selectionToken = ++latestSelectionToken;
+    if (selectionToken !== latestSelectionToken) return false;
     resetPlaybackState();
     setStatus(`Parsing ${displayName}...`, false);
     try {
         const parsedSong = await parseMidiBuffer(buffer);
-        if (selectionToken !== latestSelectionToken) {
-            return;
-        }
+        if (selectionToken !== latestSelectionToken) return false;
 
         if (!parsedSong.tracks || !parsedSong.tracks.length) {
             throw new Error("This MIDI file does not contain any playable tracks.");
@@ -4871,6 +5065,7 @@ async function loadMidiFromBuffer(buffer, displayName = "MIDI file", source = nu
             channelAssignmentsSnapshot,
             tempoSnapshot
         );
+        if (selectionToken !== latestSelectionToken) return false;
         fluidRenderer.setLoopEnabled(loopToggle.checked);
         applyActiveTuning();
         applyAllChannelVolumes();
@@ -4904,13 +5099,13 @@ async function loadMidiFromBuffer(buffer, displayName = "MIDI file", source = nu
         setStatus("Loaded. Press Play to start.", false);
         setSaveArrangementEnabled(true);
         queueCloudSettingsSave();
+        return true;
     } catch (error) {
-        if (selectionToken !== latestSelectionToken) {
-            return;
-        }
+        if (selectionToken !== latestSelectionToken) return false;
         console.error(error);
         setStatus(error && error.message ? error.message : "Failed to load MIDI file.", true);
         handleLoadFailure();
+        return false;
     }
 }
 
@@ -4920,6 +5115,7 @@ async function handleMidiSelection(event) {
         return;
     }
 
+    const selectionToken = ++latestSelectionToken;
     hideSampleModal();
     setStatus(`Reading ${file.name}...`, false);
     try {
@@ -4927,8 +5123,9 @@ async function handleMidiSelection(event) {
         await loadMidiFromBuffer(buffer, file.name, {
             source_type: "upload",
             file_name: file.name
-        });
+        }, selectionToken);
     } catch (error) {
+        if (selectionToken !== latestSelectionToken) return;
         console.error(error);
         setStatus(error && error.message ? error.message : "Failed to load MIDI file.", true);
         handleLoadFailure();
@@ -5729,6 +5926,7 @@ function setInfoVisibility(show) {
 }
 
 async function loadSampleByRecord(sample) {
+    const selectionToken = ++latestSelectionToken;
     setStatus(`Loading ${sample.name}...`, false);
     try {
         const response = await fetch(sample.url);
@@ -5742,8 +5940,9 @@ async function loadSampleByRecord(sample) {
             sample_id: sample.id || sample.url,
             folder: sample.folder,
             file_name: sample.name
-        });
+        }, selectionToken);
     } catch (error) {
+        if (selectionToken !== latestSelectionToken) return;
         console.error(error);
         setStatus(error?.message || "Failed to load sample MIDI.", true);
     }
@@ -7334,6 +7533,7 @@ async function saveArrangementToLibrary(arrangementName, tags = currentMidiSourc
     if (saveArrangementButton) {
         saveArrangementButton.disabled = true;
     }
+    const sourceAtSave = currentMidiSource;
     try {
         if (pendingArrangementRefresh) {
             const refresh = pendingArrangementRefresh;
@@ -7358,6 +7558,7 @@ async function saveArrangementToLibrary(arrangementName, tags = currentMidiSourc
             "Saving arrangement timed out. Check your Supabase table/policies and try again."
         );
         if (savedRecord) {
+            if (sourceAtSave && currentMidiSource === sourceAtSave) sourceAtSave.tags = getArrangementTags(savedRecord);
             mergeSavedSongRecordsIntoLibrarian([savedRecord], "saved");
             setActiveLibrarianItem(`saved-${savedRecord.id || savedRecord.name || savedDisplayName}`, { queue: false });
         }
@@ -7384,7 +7585,7 @@ async function saveLoadedMidiToCloud(arrayBuffer, displayName, source, parsedSon
             : buildArrangementSettingsSnapshot(),
         broadcast_recipe: buildMidiSettingsDraft(),
         source_sample_id: currentMidiSource?.sample_id || null,
-        source_folder: currentMidiSource?.folder || includedMidiFolders.get(currentMidiSource?.sample_id) || null,
+        source_folder: getMidiSourceFolder(currentMidiSource),
         tags: normalizeArrangementTags(tags)
     };
     const { data: existingRows, error: lookupError } = await supabaseClient
@@ -7454,28 +7655,30 @@ async function loadCloudMidiRecord(record, options = {}) {
     };
     const displayName = record.name || payload.file_name || "MIDI file";
     const statusMessage = options.statusMessage || "Saved arrangement restored.";
+    const selectionToken = ++latestSelectionToken;
+    const userId = currentSupabaseUser?.id;
+    let buffer;
+    const source = {
+        ...librarySource,
+        file_name: payload.file_name || displayName
+    };
     if (payload.source_type === "sample" && typeof payload.source_url === "string" && payload.source_url) {
         const response = await fetch(payload.source_url);
         if (!response.ok) {
             throw new Error(`Unable to load saved sample: ${displayName}`);
         }
-        const buffer = await response.arrayBuffer();
-        await loadMidiFromBuffer(buffer, displayName, {
-            source_type: "sample",
-            source_url: payload.source_url,
-            ...librarySource,
-            file_name: payload.file_name || displayName
-        });
+        buffer = await response.arrayBuffer();
+        source.source_type = "sample";
+        source.source_url = payload.source_url;
     } else if (payload.encoding === "base64" && typeof payload.midi_base64 === "string" && payload.midi_base64) {
-        const buffer = base64ToArrayBuffer(payload.midi_base64);
-        await loadMidiFromBuffer(buffer, displayName, {
-            source_type: "upload",
-            ...librarySource,
-            file_name: payload.file_name || displayName
-        });
+        buffer = base64ToArrayBuffer(payload.midi_base64);
+        source.source_type = "upload";
     } else {
         return false;
     }
+    if (userId !== currentSupabaseUser?.id) return false;
+    const loaded = await loadMidiFromBuffer(buffer, displayName, source, selectionToken);
+    if (!loaded || selectionToken !== latestSelectionToken) return false;
     const savedKeyframes = readSavedKeyframes(
         record.midi_meta?.broadcast_recipe?.keyframes
         ?? record.midi_meta?.radio_recipe?.keyframes
@@ -7498,32 +7701,25 @@ async function loadCloudMidiRecord(record, options = {}) {
 }
 
 async function restoreLatestCloudMidi() {
-    if (!supabaseClient || !currentSupabaseUser?.id || isRestoringCloudMidi) {
-        return;
-    }
-    const { data, error } = await withTimeout(
-        supabaseClient
-            .from("earb_user_midis")
-            .select("id,name,midi_payload,midi_meta")
-            .eq("user_id", currentSupabaseUser.id)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-        CLOUD_SAVE_TIMEOUT_MS,
-        "Restoring your latest saved arrangement timed out."
-    );
-    if (error) {
-        console.warn("Failed to restore latest cloud MIDI:", error);
-        return;
-    }
-    if (!data?.midi_payload || typeof data.midi_payload !== "object") {
-        return;
-    }
+    const userId = currentSupabaseUser?.id;
+    if (!supabaseClient || !userId || isRestoringCloudMidi || latestSelectionToken !== 0) return;
+
     isRestoringCloudMidi = true;
     try {
+        const { data, error } = await withTimeout(
+            supabaseClient
+                .from("earb_user_midis")
+                .select("id,name,midi_payload,midi_meta")
+                .eq("user_id", userId)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle(),
+            CLOUD_SAVE_TIMEOUT_MS,
+            "Restoring your latest saved arrangement timed out."
+        );
+        if (error) throw error;
+        if (latestSelectionToken !== 0 || userId !== currentSupabaseUser?.id) return;
         await loadCloudMidiRecord(data, { statusMessage: "Saved arrangement restored." });
-    } catch (restoreError) {
-        console.warn("Cloud MIDI restore failed:", restoreError);
     } finally {
         isRestoringCloudMidi = false;
     }
