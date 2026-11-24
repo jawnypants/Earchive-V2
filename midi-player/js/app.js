@@ -60,6 +60,8 @@ const PROGRESS_MIN_INTERVAL_MS = 80;
 const helpToggle = document.getElementById("help-toggle");
 const helpToggleText = document.getElementById("help-toggle-text");
 const controlHelpBubble = document.getElementById("control-help-bubble");
+const HELP_PREFERENCE_KEY = "ear_help_visible";
+let guestHelpEnabled = readGuestHelpPreference();
 let helpTarget = null;
 const infoToggle = document.getElementById("info-toggle");
 const infoBubbles = document.getElementById("info-bubbles");
@@ -1416,7 +1418,7 @@ async function loadArrangementForBroadcast(id, userId, mode) {
     if (source?.encoding === "base64" && source.midi_base64) {
         buffer = base64ToArrayBuffer(source.midi_base64);
     } else if (source?.source_type === "sample" && source.source_url) {
-        const response = await fetch(source.source_url);
+        const response = await fetch(resolveMidiAssetUrl(source.source_url));
         if (!response.ok) throw new Error("The saved MIDI could not be loaded.");
         buffer = await response.arrayBuffer();
     } else {
@@ -1431,7 +1433,7 @@ async function loadArrangementForBroadcast(id, userId, mode) {
     if (!recipe) {
         const settings = meta.arrangement_settings || {};
         const parsed = await parseMidiBuffer(buffer);
-        const tuningId = resolveSavedTuningId(settings.tuning_id || DEFAULT_TUNING_ID);
+        const tuningId = resolveLibraryAssetUrl(settings.tuning_id || DEFAULT_TUNING_ID);
         const tuning = tuningId === DEFAULT_TUNING_ID
             ? { id: DEFAULT_TUNING_ID, table: equalTemperamentTable }
             : await fetchScalaTuning(tuningId);
@@ -3018,7 +3020,7 @@ function resolveAssetPath(entryPath, rootPrefix, defaultPrefix) {
         return entryPath;
     }
     if (isAbsoluteUrl(entryPath)) {
-        return entryPath;
+        return resolveLibraryAssetUrl(entryPath);
     }
     const cleaned = entryPath.replace(/^\.\//, "");
     if (defaultPrefix && cleaned.startsWith(defaultPrefix)) {
@@ -3030,20 +3032,24 @@ function resolveAssetPath(entryPath, rootPrefix, defaultPrefix) {
     return new URL(cleaned, window.location.href).href;
 }
 
-function resolveSavedTuningId(tuningId) {
-    const legacyBase = "https://jawnypants.github.io/MidiTuningAssets/";
-    const legacySources = [
+function resolveLibraryAssetUrl(url) {
+    const previousLibrary = "https://jawnypants.github.io/MidiTuningAssets/";
+    if (!url.startsWith(previousLibrary)) return url;
+
+    const path = url.slice(previousLibrary.length)
+        .replace(/^assets\/Scala Archive\//, "assets/Scala%20Archive/");
+    const sources = [
+        ["assets/midi/", "midiBaseUrl"],
         ["assets/ScalaLite/", "scalaLiteBaseUrl"],
         ["assets/Scala%20Archive/", "scalaFullBaseUrl"]
     ];
-    for (const [legacyPath, configKey] of legacySources) {
-        const legacyPrefix = legacyBase + legacyPath;
-        if (tuningId.startsWith(legacyPrefix)) {
-            const currentBase = normalizeBaseUrl(APP_CONFIG[configKey], DEFAULT_CONFIG[configKey]);
-            return currentBase + tuningId.slice(legacyPrefix.length);
+    for (const [prefix, configKey] of sources) {
+        if (path.startsWith(prefix)) {
+            const base = normalizeBaseUrl(APP_CONFIG[configKey], DEFAULT_CONFIG[configKey]);
+            return base + path.slice(prefix.length);
         }
     }
-    return tuningId;
+    return url;
 }
 
 function resolveMidiAssetUrl(entryUrl) {
@@ -3051,7 +3057,7 @@ function resolveMidiAssetUrl(entryUrl) {
         return entryUrl;
     }
     if (isAbsoluteUrl(entryUrl)) {
-        return entryUrl;
+        return resolveLibraryAssetUrl(entryUrl);
     }
     const cleaned = entryUrl.replace(/^\.\//, "");
     if (cleaned.startsWith(DEFAULT_CONFIG.midiBaseUrl)) {
@@ -3422,6 +3428,7 @@ stationFolderTagForm.addEventListener("submit", async event => {
 function updateAuthUiForUser(user) {
     const previousUserId = currentSupabaseUser?.id;
     currentSupabaseUser = user || null;
+    syncControlHelpPreference();
     if (previousUserId !== currentSupabaseUser?.id) {
         syncStationOperator(currentSupabaseUser?.id);
         librarianTagsDialog.close();
@@ -3501,7 +3508,12 @@ async function initSupabaseAuth() {
             console.warn("Failed to restore latest cloud MIDI during auth init:", restoreError);
         });
     }
-    supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+        if (event === "USER_UPDATED" && session?.user && session.user.id === currentSupabaseUser?.id) {
+            currentSupabaseUser = session.user;
+            if (!helpToggle.disabled) syncControlHelpPreference();
+            return;
+        }
         updateAuthUiForUser(session?.user || null);
         if (session?.user) {
             loadLibrarianSavedSongs({ force: true, showStatus: false }).catch((songsError) => {
@@ -3947,7 +3959,7 @@ async function applyArrangementSettingsSnapshot(snapshot, options = {}) {
         const savedTuningId = typeof snapshot.tuning_id === "string" && snapshot.tuning_id
             ? snapshot.tuning_id
             : DEFAULT_TUNING_ID;
-        const nextTuning = resolveSavedTuningId(savedTuningId);
+        const nextTuning = resolveLibraryAssetUrl(savedTuningId);
         if (tuningSelect) {
             const option = tuningSelect.querySelector(`option[value="${escapeCssValue(nextTuning)}"]`);
             if (option) {
@@ -4491,11 +4503,7 @@ if (sampleCancelButton) {
         setStatus("Sample load canceled.", false);
     });
 }
-helpToggle.addEventListener("change", () => {
-    helpToggleText.textContent = helpToggle.checked ? "Hide Help Bubbles" : "Show Help Bubbles";
-    if (helpToggle.checked) showControlHelp(helpToggle);
-    else hideControlHelp();
-});
+helpToggle.addEventListener("change", saveControlHelpPreference);
 
 document.addEventListener("pointerover", event => {
     if (helpToggle.checked && event.pointerType !== "touch" && event.target instanceof Element) {
@@ -4998,7 +5006,10 @@ async function bootstrapApp() {
     const config = await loadAppConfig();
     applyAppConfig(config);
     refreshRadiographAudioSource();
-    await initSupabaseAuth();
+    await initSupabaseAuth().finally(() => {
+        helpToggle.disabled = false;
+        syncControlHelpPreference();
+    });
     startRadiographStatusPolling();
     startRadiographLeaderboardRotation();
     refreshFavoritesMenus();
@@ -5921,6 +5932,64 @@ function populateSampleMidiSelect(manifest) {
     }
 }
 
+function readGuestHelpPreference() {
+    try {
+        return localStorage.getItem(HELP_PREFERENCE_KEY) !== "false";
+    } catch (_) {
+        return true;
+    }
+}
+
+function setControlHelpEnabled(enabled) {
+    helpToggle.checked = enabled;
+    helpToggleText.textContent = enabled ? "Hide Help Bubbles" : "Show Help Bubbles";
+    if (!enabled) hideControlHelp();
+}
+
+function syncControlHelpPreference() {
+    const enabled = currentSupabaseUser?.id
+        ? currentSupabaseUser.user_metadata?.earb_help_visible !== false
+        : guestHelpEnabled;
+    setControlHelpEnabled(enabled);
+}
+
+async function saveControlHelpPreference() {
+    const enabled = helpToggle.checked;
+    const userId = currentSupabaseUser?.id;
+    setControlHelpEnabled(enabled);
+
+    if (!userId) {
+        guestHelpEnabled = enabled;
+        try {
+            localStorage.setItem(HELP_PREFERENCE_KEY, String(enabled));
+        } catch (_) {
+            // Keep the preference for this page if browser storage is unavailable.
+        }
+        if (enabled) showControlHelp(helpToggle);
+        return;
+    }
+
+    helpToggle.disabled = true;
+    try {
+        const { data, error } = await supabaseClient.auth.updateUser({
+            data: { earb_help_visible: enabled }
+        });
+        if (error) throw error;
+        if (data?.user?.id === userId && currentSupabaseUser?.id === userId) {
+            currentSupabaseUser = data.user;
+            setAuthStatus(`Signed in as ${data.user.email}. Cloud settings sync is active.`, false);
+        }
+    } catch (error) {
+        console.warn("Could not save the Help Bubbles preference:", error);
+        if (currentSupabaseUser?.id === userId) {
+            setAuthStatus("Could not save your Help Bubbles preference. Try again.", true);
+        }
+    } finally {
+        helpToggle.disabled = false;
+        syncControlHelpPreference();
+    }
+}
+
 function hideControlHelp() {
     if (!helpTarget) return;
     const descriptions = (helpTarget.getAttribute("aria-describedby") || "").split(/\s+/)
@@ -6782,7 +6851,8 @@ async function handleTuningSelection(value) {
     }
 }
 
-async function fetchScalaTuning(path) {
+async function fetchScalaTuning(tuningId) {
+    const path = resolveLibraryAssetUrl(tuningId);
     if (tuningCache.has(path)) {
         return tuningCache.get(path);
     }
@@ -7713,13 +7783,14 @@ async function loadCloudMidiRecord(record, options = {}) {
         file_name: payload.file_name || displayName
     };
     if (payload.source_type === "sample" && typeof payload.source_url === "string" && payload.source_url) {
-        const response = await fetch(payload.source_url);
+        const sampleUrl = resolveMidiAssetUrl(payload.source_url);
+        const response = await fetch(sampleUrl);
         if (!response.ok) {
             throw new Error(`Unable to load saved sample: ${displayName}`);
         }
         buffer = await response.arrayBuffer();
         source.source_type = "sample";
-        source.source_url = payload.source_url;
+        source.source_url = sampleUrl;
     } else if (payload.encoding === "base64" && typeof payload.midi_base64 === "string" && payload.midi_base64) {
         buffer = base64ToArrayBuffer(payload.midi_base64);
         source.source_type = "upload";
