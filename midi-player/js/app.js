@@ -294,6 +294,7 @@ let radiographRecipeUrl = "";
 let radiographHls = null;
 let radiographStatusTimer = null;
 let radiographCountdownTimer = null;
+let radiographBoundaryPollAfter = 0;
 let radiographRecoveryTimer = null;
 let radiographAudioContext = null;
 let radiographAnalyser = null;
@@ -303,6 +304,7 @@ let radiographMeterFrame = null;
 let radiographDisplayedLevels = [];
 let currentRadiographTrackId = null;
 let currentRadiographFile = "";
+let currentRadiographStartedAt = "";
 let currentRadiographHasRecipe = false;
 let currentRadiographCreatorName = "";
 let radiographRatingSyncToken = 0;
@@ -582,14 +584,37 @@ async function postRadioGraphComment(trackId, commentText) {
     }
 }
 
-function formatRadioTimeRemaining(now) {
+function getRadiographPlaybackTime() {
+    if (!radiographAudio || radiographAudio.paused || radiographAudio.readyState < 2) return null;
+    const playingDate = radiographHls?.playingDate?.getTime();
+    if (Number.isFinite(playingDate)) return playingDate;
+    const nativeStart = radiographAudio.getStartDate?.()?.getTime();
+    if (Number.isFinite(nativeStart)) return nativeStart + radiographAudio.currentTime * 1000;
+
+    const latency = radiographHls?.latency;
+    return Number.isFinite(latency) && latency > 0 ? Date.now() - latency * 1000 : null;
+}
+
+function getAudibleRadiographTrack(status, playbackTime) {
+    const current = status?.now_playing;
+    if (playbackTime === null || !status?.playouts?.length) return current;
+    for (let i = status.playouts.length - 1; i >= 0; i--) {
+        const playout = status.playouts[i];
+        if (Date.parse(playout.started_at) <= playbackTime) {
+            return playout.started_at === current?.started_at ? { ...playout, ...current } : playout;
+        }
+    }
+    return current;
+}
+
+function formatRadioTimeRemaining(now, timestamp = Date.now()) {
     const startedAt = Date.parse(now?.started_at || "");
     const duration = Number(now?.duration_sec);
     if (!Number.isFinite(startedAt) || !Number.isFinite(duration) || duration <= 0) {
         return "live broadcast";
     }
-    const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-    const remaining = Math.max(0, Math.round(duration - elapsed));
+    const elapsed = Math.max(0, (timestamp - startedAt) / 1000);
+    const remaining = Math.max(0, Math.ceil(duration - elapsed));
     const minutes = Math.floor(remaining / 60);
     const seconds = String(remaining % 60).padStart(2, "0");
     return `${minutes}:${seconds} remaining`;
@@ -752,12 +777,28 @@ function refreshRadiographPublishedSongs() {
     });
 }
 
-function renderRadiographQueue(status) {
-    const tracks = Array.isArray(status?.upcoming)
-        ? status.upcoming.slice(0, 7)
-        : Array.isArray(status?.tracks) ? status.tracks : [];
-    const now = status?.now_playing || {};
-    const currentFile = now.title || "";
+function getRadiographUpcoming(status, now) {
+    const rotation = Array.isArray(status?.tracks) ? status.tracks : [];
+    let upcoming = status?.upcoming;
+    if (!Array.isArray(upcoming)) {
+        const next = rotation.findIndex(track => getRadiographTrackFile(track) === status?.now_playing?.next_up);
+        const current = rotation.findIndex(track => getRadiographTrackFile(track) === status?.now_playing?.title);
+        const start = next >= 0 ? next : current + 1;
+        upcoming = [...rotation.slice(start), ...rotation.slice(0, start)];
+    }
+    const playouts = status?.playouts || [];
+    const current = playouts.findIndex(track => track.started_at === now?.started_at);
+    if (current < 0 || current === playouts.length - 1) return upcoming;
+    // The station queue is ahead of listeners who are playing buffered audio.
+    const buffered = playouts.slice(current + 1).map(track => ({
+        file: track.title,
+        title: track.track_title
+    }));
+    return [...buffered, ...upcoming];
+}
+
+function renderRadiographQueue(status, now) {
+    const tracks = getRadiographUpcoming(status, now).slice(0, 7);
     if (radiographQueueCount) {
         radiographQueueCount.textContent = tracks.length ? `${tracks.length} tracks` : "empty";
     }
@@ -781,15 +822,9 @@ function renderRadiographQueue(status) {
     tracks.forEach((track, index) => {
         const file = getRadiographTrackFile(track);
         const title = typeof track === "string" ? formatRadioTrackName(track) : (track?.title || formatRadioTrackName(file));
-        const hasUpcoming = Array.isArray(status.upcoming);
-        const isCurrent = !hasUpcoming && file === currentFile;
-        const isNext = hasUpcoming ? index === 0 : file === now.next_up;
         const row = document.createElement("div");
         row.className = "radiograph-queue-item";
-        row.classList.toggle("is-active", isCurrent);
-        const meta = isCurrent
-            ? `Playing now - ${formatRadioTimeRemaining(now)}`
-            : (isNext ? "Next up" : "In rotation");
+        const meta = index === 0 ? "Next up" : "In rotation";
         row.innerHTML = `
             <span class="radiograph-queue-index">${String(index + 1).padStart(2, "0")}</span>
             <span>
@@ -805,13 +840,21 @@ function renderRadiographQueue(status) {
 
 function renderRadiographStationStatus(status) {
     radiographLatestStationStatus = status;
-    const now = status?.now_playing || {};
-    const currentFile = now.title || "";
     setRadiographListenerCount(status?.listener_count);
+    const now = getAudibleRadiographTrack(status, getRadiographPlaybackTime());
+    renderRadiographNowPlaying(status, now);
+    renderRadiographQueue(status, now);
+    updateRadiographCountdown();
+    renderRadiographPublishedSongs();
+}
+
+function renderRadiographNowPlaying(status, now) {
+    currentRadiographStartedAt = now?.started_at || "";
+    const currentFile = now?.title || "";
     const tracks = Array.isArray(status?.tracks) ? status.tracks : [];
-    const currentTrack = tracks.find(track => (typeof track === "string" ? track : track?.file) === currentFile);
-    currentRadiographHasRecipe = Boolean(currentTrack && typeof currentTrack === "object" && currentTrack.has_recipe);
-    currentRadiographCreatorName = currentTrack && typeof currentTrack === "object" ? (currentTrack.creator_name || "") : "";
+    const currentTrack = tracks.find(track => getRadiographTrackFile(track) === currentFile);
+    currentRadiographHasRecipe = Boolean(now?.has_recipe ?? currentTrack?.has_recipe);
+    currentRadiographCreatorName = now?.creator_name ?? currentTrack?.creator_name ?? "";
     if (currentFile !== currentRadiographFile) {
         currentRadiographFile = currentFile;
         currentRadiographTrackId = null;
@@ -832,28 +875,37 @@ function renderRadiographStationStatus(status) {
         const index = tracks.findIndex(track => (typeof track === "string" ? track : track?.file) === currentFile);
         radiographRotationRank.textContent = index >= 0 ? `Rotation #${index + 1}` : "Rotation sync";
     }
-    renderRadiographQueue(status);
-    updateRadiographCountdown();
-    renderRadiographPublishedSongs();
 }
 
 function updateRadiographCountdown() {
     const status = radiographLatestStationStatus;
-    const now = status?.now_playing;
-    const countdown = formatRadioTimeRemaining(now);
+    const playbackTime = getRadiographPlaybackTime();
+    const now = getAudibleRadiographTrack(status, playbackTime);
+    if (status && ((now?.title || "") !== currentRadiographFile
+        || (now?.started_at || "") !== currentRadiographStartedAt)) {
+        renderRadiographNowPlaying(status, now);
+        renderRadiographQueue(status, now);
+    }
+    const wallTime = Date.now();
+    const countdown = formatRadioTimeRemaining(now, playbackTime ?? wallTime);
     if (radiographNowMeta) {
-        const nextTitle = status?.upcoming?.[0]?.title || formatRadioTrackName(now?.next_up);
-        const next = now?.next_up ? `Next: ${nextTitle}` : "Next track pending";
+        const nextTrack = getRadiographUpcoming(status, now)[0];
+        const nextFile = getRadiographTrackFile(nextTrack) || now?.next_up;
+        const nextTitle = nextTrack?.title || formatRadioTrackName(nextFile);
+        const next = nextFile ? `Next: ${nextTitle}` : "Next track pending";
         const creator = currentRadiographCreatorName ? `By ${currentRadiographCreatorName} - ` : "";
         const text = now?.title
             ? `${creator}${countdown} - ${next}`
             : "The live stream can play before metadata is available.";
         if (radiographNowMeta.textContent !== text) radiographNowMeta.textContent = text;
     }
-    const currentQueueMeta = radiographQueueList?.querySelector(".is-active .radiograph-queue-meta");
-    if (now?.title && currentQueueMeta) {
-        const text = `Playing now - ${countdown}`;
-        if (currentQueueMeta.textContent !== text) currentQueueMeta.textContent = text;
+    // Load the next track's metadata while the listener is still hearing buffered audio.
+    const newest = status?.playouts?.at(-1) ?? status?.now_playing;
+    const newestEnd = Date.parse(newest?.started_at || "") + Number(newest?.duration_sec) * 1000;
+    if (playbackTime !== null && radiographNowMeta?.closest(".page-view.is-active")
+        && playbackTime >= newestEnd - 2000 && wallTime >= radiographBoundaryPollAfter && !radiographStationRequest) {
+        radiographBoundaryPollAfter = wallTime + 3000;
+        refreshRadiographStationStatus();
     }
 }
 
@@ -1231,15 +1283,6 @@ function setupRadiographStream() {
     if (!radiographAudio || !radiographStreamUrl) {
         return false;
     }
-    const canPlayNativeHls = typeof radiographAudio.canPlayType === "function"
-        && radiographAudio.canPlayType("application/vnd.apple.mpegurl");
-    if (canPlayNativeHls) {
-        destroyRadiographHls();
-        if (radiographAudio.src !== radiographStreamUrl) {
-            radiographAudio.src = radiographStreamUrl;
-        }
-        return true;
-    }
     const HlsConstructor = window.Hls;
     if (HlsConstructor?.isSupported?.()) {
         destroyRadiographHls();
@@ -1260,6 +1303,11 @@ function setupRadiographStream() {
         });
         radiographHls.loadSource(radiographStreamUrl);
         radiographHls.attachMedia(radiographAudio);
+        return true;
+    }
+    if (radiographAudio.canPlayType("application/vnd.apple.mpegurl")) {
+        destroyRadiographHls();
+        if (radiographAudio.src !== radiographStreamUrl) radiographAudio.src = radiographStreamUrl;
         return true;
     }
     setRadiographStatus("This browser needs HLS.js, but the HLS player script did not load.", true);
@@ -1295,6 +1343,7 @@ async function playRadiographStream() {
         startRadiographVolumeMeter();
         setRadiographStatus("Live radio is playing.");
         setRadiographLiveState("live");
+        updateRadiographCountdown();
     } catch (error) {
         if (error?.name === "AbortError" && radiographAudio.paused) return;
         console.warn("Radio stream playback failed:", error);
@@ -2675,6 +2724,7 @@ if (radiographAudio) {
         startRadiographVolumeMeter();
         setRadiographStatus("Live radio is playing.");
         setRadiographLiveState("live");
+        updateRadiographCountdown();
     });
     radiographAudio.addEventListener("pause", () => {
         setRadiographLiveState("standby");
