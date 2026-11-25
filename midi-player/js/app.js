@@ -172,7 +172,6 @@ const queueShuffleToggleButton = document.getElementById("queue-shuffle-toggle")
 const librarianFilterButtons = Array.from(document.querySelectorAll("[data-library-filter]"));
 const radiographAudio = document.getElementById("radiograph-audio");
 const radiographPlayButton = document.getElementById("radiograph-play");
-const radiographMuteButton = document.getElementById("radiograph-mute");
 const radiographReconnectButton = document.getElementById("radiograph-reconnect");
 const radiographStatus = document.getElementById("radiograph-status");
 const radiographModeStatus = document.getElementById("radiograph-mode-status");
@@ -369,14 +368,18 @@ function setRadiographLiveState(state) {
     if (radiographSignal) {
         radiographSignal.classList.toggle("is-playing", isLive);
     }
-    if (radiographPlayButton) {
-        radiographPlayButton.classList.toggle("is-playing", isLive);
-        radiographPlayButton.setAttribute("aria-label", isLive ? "Pause live radio" : "Play live radio");
-    }
     if (!isLive) {
         stopRadiographVolumeMeter();
         resetRadiographVolumeBars();
     }
+    updateRadiographPlaybackControls();
+}
+
+function updateRadiographPlaybackControls() {
+    const action = radiographPlaybackRequested ? "Pause" : "Play";
+    radiographPlayButton.classList.toggle("is-playing", radiographPlaybackRequested);
+    radiographPlayButton.textContent = action;
+    radiographPlayButton.setAttribute("aria-label", `${action} live radio`);
     updateMobilePlayerDisplay();
 }
 
@@ -1386,7 +1389,7 @@ async function playRadiographStream() {
     radiographPlaybackRequested = true;
     updateMidiMonitor();
     pausePlayback();
-    updateMobilePlayerDisplay();
+    updateRadiographPlaybackControls();
     try {
         await radiographAudio.play();
         if (request !== radiographPlaybackRequest || radiographAudio.paused) return;
@@ -2658,7 +2661,7 @@ function updateMobilePlayerDisplay() {
     const radio = mobilePlayerMode === "radiograph";
     const title = radio ? radiographNowTitle.textContent : songTitle.textContent || "No song selected";
     if (mobilePlayerTitle.textContent !== title) mobilePlayerTitle.textContent = title;
-    const audioOn = radio ? radiographPlaybackRequested && !radiographAudio.muted : audioReady && !midiMonitorMuted;
+    const audioOn = radio ? radiographPlaybackRequested : audioReady && !midiMonitorMuted;
     mobilePlayerAudio.textContent = audioOn ? "Audio Off" : "Audio";
     mobilePlayerAudio.setAttribute("aria-label", radio
         ? (audioOn ? "Pause live radio" : "Play live radio")
@@ -2709,6 +2712,9 @@ function showMobilePlayer(mode) {
     mobilePlayerToggle.textContent = "Close mini-player";
     mobilePlayerToggle.setAttribute("aria-expanded", "true");
     mobilePlayerSource.textContent = `${mode === "radiograph" ? "RadioGraph" : "Librarian"} · Now Playing`;
+    mobilePlayerAudio.dataset.help = mode === "radiograph"
+        ? "Play or pause live radio. Starting here pauses Librarian playback and rejoins the live broadcast."
+        : "Turn Librarian sound on or off. Use Play/Pause to pause the song itself.";
     mobilePlayerLibrary.hidden = mode !== "librarian";
     renderMobilePlayerQueue();
     updateMobilePlayerDisplay();
@@ -2727,10 +2733,6 @@ mobilePlayerToggle.addEventListener("click", () => {
 
 mobilePlayerAudio.addEventListener("click", async () => {
     if (mobilePlayerMode === "radiograph") {
-        if (radiographAudio.muted) {
-            setRadiographMuted(false);
-            if (radiographPlaybackRequested) return;
-        }
         toggleRadiographPlayback();
         return;
     }
@@ -2869,18 +2871,6 @@ if (librarianCommentInput) {
 
 if (radiographPlayButton) {
     radiographPlayButton.addEventListener("click", toggleRadiographPlayback);
-}
-
-function setRadiographMuted(muted) {
-    radiographAudio.muted = muted;
-    radiographMuteButton.classList.toggle("is-muted", muted);
-    radiographMuteButton.setAttribute("aria-pressed", String(muted));
-    setRadiographStatus(muted ? "Live radio muted." : "Live radio unmuted.");
-    updateMobilePlayerDisplay();
-}
-
-if (radiographMuteButton) {
-    radiographMuteButton.addEventListener("click", () => setRadiographMuted(!radiographAudio.muted));
 }
 
 if (radiographReconnectButton) {
@@ -4701,6 +4691,50 @@ if (sampleCancelButton) {
 }
 helpToggle.addEventListener("change", saveControlHelpPreference);
 
+let pendingTouchHelp = null;
+let heldHelpTarget = null;
+
+function cancelTouchHelp() {
+    clearTimeout(pendingTouchHelp?.timer);
+    pendingTouchHelp = null;
+}
+
+document.addEventListener("pointerdown", event => {
+    heldHelpTarget = null;
+    if (event.pointerType !== "touch") return;
+    cancelTouchHelp();
+    hideControlHelp();
+    const origin = event.target;
+    if (!helpToggle.checked || !(origin instanceof Element) || !origin.closest("[data-help]")) return;
+
+    pendingTouchHelp = {
+        x: event.clientX,
+        y: event.clientY,
+        timer: setTimeout(() => {
+            if (!helpToggle.checked || !origin.isConnected) return;
+            showControlHelp(origin);
+            heldHelpTarget = helpTarget;
+        }, 450)
+    };
+}, { passive: true });
+document.addEventListener("pointermove", event => {
+    if (pendingTouchHelp && event.pointerType === "touch"
+        && Math.hypot(event.clientX - pendingTouchHelp.x, event.clientY - pendingTouchHelp.y) > 10) {
+        cancelTouchHelp();
+    }
+}, { passive: true });
+document.addEventListener("pointerup", cancelTouchHelp);
+document.addEventListener("pointercancel", cancelTouchHelp);
+document.addEventListener("contextmenu", event => {
+    if (heldHelpTarget?.contains(event.target)) event.preventDefault();
+});
+document.addEventListener("click", event => {
+    if (!heldHelpTarget?.contains(event.target) || !event.detail) return;
+    heldHelpTarget = null;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+}, true);
+
 document.addEventListener("pointerover", event => {
     if (helpToggle.checked && event.pointerType !== "touch" && event.target instanceof Element) {
         showControlHelp(event.target);
@@ -5502,7 +5536,7 @@ function renderInstrumentMenus() {
         volumeInput.type = "range";
         volumeLabel.setAttribute("aria-hidden", "true");
         volumeInput.setAttribute("aria-label", `Volume for ${track.name}`);
-        volumeInput.dataset.help = "Adjust this track’s loudness independently of the other tracks.";
+        volumeInput.dataset.help = "Click or drag anywhere on the bar, or use the arrow keys, to adjust this track’s volume.";
         volumeInput.min = TRACK_VOLUME_RANGE.min.toString();
         volumeInput.max = TRACK_VOLUME_RANGE.max.toString();
         volumeInput.step = "0.01";

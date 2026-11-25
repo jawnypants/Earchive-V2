@@ -2554,6 +2554,14 @@ h3 {
     position: absolute;
 }
 
+.radiograph-control--play {
+    width: auto;
+    min-width: 100px;
+    padding: 0 12px 0 38px;
+    color: #d8dde4;
+    font-weight: 800;
+}
+
 .radiograph-control--play::before {
     left: 16px;
     top: 50%;
@@ -2571,33 +2579,6 @@ h3 {
     height: 20px;
     border: 0;
     border-inline: 5px solid #2fbc4d;
-}
-
-.radiograph-control--mute::before {
-    left: 12px;
-    top: 13px;
-    width: 14px;
-    height: 16px;
-    background: #d8dde4;
-    clip-path: polygon(0 28%, 45% 28%, 100% 0, 100% 100%, 45% 72%, 0 72%);
-}
-
-.radiograph-control--mute::after {
-    right: 9px;
-    top: 12px;
-    width: 9px;
-    height: 18px;
-    border-right: 3px solid #d8dde4;
-    border-radius: 50%;
-}
-
-.radiograph-control--mute.is-muted::after {
-    right: 10px;
-    top: 10px;
-    width: 22px;
-    height: 22px;
-    border: 0;
-    background: linear-gradient(45deg, transparent 44%, #e33a3a 44% 56%, transparent 56%);
 }
 
 .radiograph-control--reconnect::before {

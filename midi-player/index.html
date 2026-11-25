@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Earchive of the Alternative Present</title>
-    <link rel="stylesheet" href="style.css?v=mobile-player">
+    <link rel="stylesheet" href="style.css?v=radio-play-help">
 </head>
 <body>
     <header class="title-shell">
@@ -37,16 +37,16 @@
     </header>
 
     <div class="tabs-auth-row">
-        <nav class="app-tabs" aria-label="Earchive sections">
+        <nav class="app-tabs" aria-label="Earchive sections" data-help="On phones, these tabs stay at the top as you scroll.">
             <button class="tab is-active" type="button" data-page="recomposer" aria-current="page" data-help="Open a MIDI file and change how it sounds.">Recomposer</button>
             <button class="tab" type="button" data-page="librarian" data-help="Find your saved music, build playlists, and listen.">Librarian</button>
-            <button class="tab" type="button" data-page="radiograph" data-help="Listen to the live station, rate songs, or submit an arrangement.">RadioGraph</button>
+            <button class="tab" type="button" data-page="radiograph" data-help="Listen to the live station, save broadcasts to your library, or submit an arrangement.">RadioGraph</button>
             <button id="station-control-tab" class="tab is-hidden" type="button" data-page="station-control" data-help="Manage the active RadioGraph show and publish news on Recomposer.">Control Panel</button>
         </nav>
         <div class="tabs-support">
             <div class="help-bubbles-toggle">
                 <span id="help-toggle-text">Show Help Bubbles</span>
-                <input id="help-toggle" type="checkbox" disabled aria-labelledby="help-toggle-text" autocomplete="off" data-help="Check the box to show tips when you hover over a control or reach it with the keyboard.">
+                <input id="help-toggle" type="checkbox" disabled aria-labelledby="help-toggle-text" autocomplete="off" data-help="Help Bubbles are on by default. Hover, focus a control with the keyboard, or touch and hold to read a tip. Your account remembers this setting when you sign in.">
             </div>
             <div class="auth-quick">
                 <button id="auth-launch" type="button" data-help="Sign in to save arrangements, publish, rate, and comment. Open Account to sign out.">Sign In</button>
@@ -57,8 +57,8 @@
 
     <div class="mobile-dock">
         <div class="mobile-dock__actions">
-            <button id="mobile-player-toggle" type="button" aria-controls="mobile-player" aria-expanded="false" hidden>Mini-player</button>
-            <button id="mobile-return-top" type="button" aria-label="Return to top" title="Return to top" hidden>↑</button>
+            <button id="mobile-player-toggle" type="button" aria-controls="mobile-player" aria-expanded="false" data-help="Open or close the mini-player. Closing it leaves playback running." hidden>Mini-player</button>
+            <button id="mobile-return-top" type="button" aria-label="Return to top" data-help="Scroll back to the top of this page." hidden>↑</button>
         </div>
         <section id="mobile-player" class="mobile-player" aria-label="Mini-player" hidden>
             <div class="mobile-player__now">
@@ -71,14 +71,14 @@
             <div id="mobile-player-library" class="mobile-player__library" hidden>
                 <label class="mobile-player__playlist">
                     <span>Playlist</span>
-                    <select id="mobile-player-playlist"></select>
+                    <select id="mobile-player-playlist" data-help="Choose a playlist, or select All Songs to queue your entire library."></select>
                 </label>
                 <div id="mobile-player-queue-label" class="mobile-player__source">Queue</div>
-                <ol id="mobile-player-queue" class="mobile-player__queue" aria-labelledby="mobile-player-queue-label"></ol>
+                <ol id="mobile-player-queue" class="mobile-player__queue" aria-labelledby="mobile-player-queue-label" data-help="Scroll to see the songs in the queue. Select a song to jump to it."></ol>
                 <div class="mobile-player__transport" role="group" aria-label="Playlist playback controls">
-                    <button id="mobile-player-previous" type="button">Previous</button>
-                    <button id="mobile-player-play" type="button">Play</button>
-                    <button id="mobile-player-next" type="button">Next</button>
+                    <button id="mobile-player-previous" type="button" data-help="Select the previous song in this queue.">Previous</button>
+                    <button id="mobile-player-play" type="button" data-help="Start or pause the queue. Songs advance automatically. Starting playback pauses RadioGraph.">Play</button>
+                    <button id="mobile-player-next" type="button" data-help="Skip to the next song, or to a random song if shuffle is on.">Next</button>
                 </div>
             </div>
             <p id="mobile-player-status" class="mobile-player__status" role="status"></p>
@@ -109,7 +109,7 @@
                             <div class="row tight action-row">
                                 <button id="load-button" class="button action-button" type="button" disabled data-help="Open a MIDI file from your computer or choose one from the Earchive library.">LOAD MIDI FILE</button>
                                 <button id="load-arrangement" class="button action-button" type="button" title="Sign in to load saved arrangements" data-help="Reopen a saved arrangement with its instruments, tuning, and keyframes.">LOAD ARRANGEMENT</button>
-                                <button id="save-arrangement" class="button action-button" type="button" title="Sign in to enable arrangement saving" disabled data-help="You must SAVE ARRANGEMENT to broadcast your file. This saves all current settings.">SAVE ARRANGEMENT</button>
+                                <button id="save-arrangement" class="button action-button" type="button" title="Sign in to enable arrangement saving" disabled data-help="Save the MIDI and its settings to your account. Song Info shows the saved name. Save here before submitting to RadioGraph.">SAVE ARRANGEMENT</button>
                                 <button id="record" class="button action-button" type="button" disabled data-help="Record the arrangement from the beginning and save it as an audio file.">Download Audio-File</button>
                             </div>
                             <div id="status" class="inline-status">Click Audio to begin.</div>
@@ -275,8 +275,8 @@
                         <h2 id="queue-heading">Queue</h2>
                         <div class="queue-transport-controls" role="group" aria-label="Queue transport">
                             <button id="queue-previous" class="queue-transport-button queue-transport-button--previous" type="button" aria-label="Previous song" data-hint="←" data-help="Press once to restart this song. Press again quickly to go to the previous song."></button>
-                            <button id="queue-play-toggle" class="queue-transport-button queue-transport-button--play" type="button" aria-label="Play queue" aria-keyshortcuts="Space" data-hint="spacebar" data-help="Start or pause the playlist queue. The spacebar also works."></button>
-                            <button id="queue-next" class="queue-transport-button queue-transport-button--next" type="button" aria-label="Next song" data-hint="→" data-help="Skip to the next song in the queue."></button>
+                            <button id="queue-play-toggle" class="queue-transport-button queue-transport-button--play" type="button" aria-label="Play queue" aria-keyshortcuts="Space" data-hint="spacebar" data-help="Start or pause the queue. Songs advance automatically. Starting playback pauses RadioGraph. The spacebar also works."></button>
+                            <button id="queue-next" class="queue-transport-button queue-transport-button--next" type="button" aria-label="Next song" data-hint="→" data-help="Skip to the next song, or to a random song if shuffle is on."></button>
                             <button id="queue-shuffle-toggle" class="queue-transport-button queue-transport-button--play-next" type="button" aria-label="Play next mode" aria-pressed="false" data-hint="Play Next / Shuffle" data-help="Switch between playing the queue in order and choosing the next song at random."></button>
                         </div>
                     </div>
@@ -290,7 +290,7 @@
                         <div class="librarian-filter-group" role="group" aria-label="Song filters">
                             <button class="librarian-filter is-active" type="button" data-library-filter="all" data-help="Show your saved arrangements and saved RadioGraph songs together.">All</button>
                             <button class="librarian-filter" type="button" data-library-filter="saved" data-help="Show arrangements you saved in Recomposer.">My Saved</button>
-                            <button class="librarian-filter" type="button" data-library-filter="broadcast" data-help="Show songs you saved from RadioGraph.">Saved From Broadcast</button>
+                            <button class="librarian-filter" type="button" data-library-filter="broadcast" data-help="Show arrangements you saved from RadioGraph, with the original creators credited.">Saved From Broadcast</button>
                         </div>
                     </div>
                     <div id="librarian-library-list" class="librarian-list" aria-label="Songs"></div>
@@ -332,8 +332,7 @@
                         </div>
                         <audio id="radiograph-audio" preload="none" crossorigin="anonymous"></audio>
                         <div class="radiograph-station-controls" role="group" aria-label="Radio controls">
-                            <button id="radiograph-play" class="radiograph-control radiograph-control--play" type="button" aria-label="Play live radio" aria-keyshortcuts="Space" data-help="Play or pause live radio. Press Space to toggle playback. When you resume, you rejoin the live broadcast."></button>
-                            <button id="radiograph-mute" class="radiograph-control radiograph-control--mute" type="button" aria-label="Mute live radio" aria-pressed="false" data-help="Silence the live stream. Unmute to hear what’s playing then."></button>
+                            <button id="radiograph-play" class="radiograph-control radiograph-control--play" type="button" aria-label="Play live radio" aria-keyshortcuts="Space" data-help="Play or pause the station. Play rejoins the live broadcast and pauses Librarian playback. The spacebar also works.">Play</button>
                             <button id="radiograph-reconnect" class="radiograph-control radiograph-control--reconnect" type="button" aria-label="Reconnect live radio" data-help="Reconnect if the stream stalls or falls behind."></button>
                         </div>
                         <div id="radiograph-status" class="inline-status radiograph-status" aria-live="polite">RadioGraph is ready for the stream endpoint.</div>
@@ -402,7 +401,7 @@
                                     <div id="radiograph-rating-status" class="inline-status radiograph-status" aria-live="polite">Ratings affect future rotation weight.</div>
                                     <div id="radiograph-save-library-status" class="inline-status radiograph-status" role="status"></div>
                                 </div>
-                                <button id="radiograph-save-library" class="button radiograph-action radiograph-save-library" type="button" disabled data-help="Save this broadcast arrangement to Songs in the Librarian. Select a playlist and choose the song to add it to the queue.">Save Arrangement<br>To My Library</button>
+                                <button id="radiograph-save-library" class="button radiograph-action radiograph-save-library" type="button" disabled data-help="Sign in to save this broadcast’s MIDI and settings under Songs → Saved From Broadcast. Choose a playlist, then select the song to add it to the queue.">Save Arrangement<br>To My Library</button>
                             </div>
                         </div>
                     </section>
@@ -534,7 +533,7 @@
         <div class="modal__content">
             <h3 id="save-arrangement-modal-title">Save Arrangement</h3>
             <label for="save-arrangement-name">Arrangement name</label>
-            <input id="save-arrangement-name" type="text" maxlength="120" placeholder="Arrangement name" data-help="Use a new name to keep a separate version, or use an existing name to replace that saved version.">
+            <input id="save-arrangement-name" type="text" maxlength="120" placeholder="Arrangement name" data-help="Use a new name to save a separate arrangement in your account. Use an existing name to replace that version. Song Info updates to the saved name.">
             <label for="save-arrangement-tags">Tags (optional)</label>
             <input id="save-arrangement-tags" list="save-arrangement-shared-tags" aria-describedby="save-arrangement-tags-hint" type="text" maxlength="420" placeholder="e.g. Christmas, Jazz" data-help="Add comma-separated tags such as Christmas or Jazz. An arrangement can have several tags, and the station uses them to decide which shows can play it.">
             <datalist id="save-arrangement-shared-tags"></datalist>
@@ -616,6 +615,6 @@
     <script src="js/player-core.js?v=mobile-player"></script>
     <script src="assets/vendor/midi-file/parse.js"></script>
     <script src="js/midi-source.js"></script>
-    <script src="js/app.js?v=mobile-player"></script>
+    <script src="js/app.js?v=radio-play-help"></script>
 </body>
 </html>
