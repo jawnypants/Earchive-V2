@@ -1296,18 +1296,24 @@ h3 {
 .track-volume {
     position: relative;
     width: 100%;
-    height: 14px;
-    border: 1px solid #b8bec8;
+    height: 24px;
     border-radius: 2px;
     overflow: hidden;
     background: #d9dde3;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .track-volume input[type="range"] {
+    display: block;
     width: 100%;
     height: 100%;
     margin: 0;
+    border: 1px solid #b8bec8;
+    border-radius: inherit;
+    -webkit-appearance: none;
     appearance: none;
+    cursor: pointer;
     background: linear-gradient(
         90deg,
         #f28a00 0%,
@@ -1315,6 +1321,11 @@ h3 {
         #d9dde3 var(--volume-fill, 100%),
         #d9dde3 100%
     );
+}
+
+.track-volume input[type="range"]:focus-visible {
+    outline: 2px solid #343a43;
+    outline-offset: -2px;
 }
 
 .track-volume__label {
@@ -1336,9 +1347,10 @@ h3 {
 }
 
 .track-volume input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
     appearance: none;
-    width: 3px;
-    height: 14px;
+    width: 5px;
+    height: 22px;
     border: none;
     border-radius: 0;
     background: #5f6874;
@@ -1346,19 +1358,19 @@ h3 {
 }
 
 .track-volume input[type="range"]::-moz-range-track {
-    height: 14px;
+    height: 22px;
     border: 0;
     background: transparent;
 }
 
 .track-volume input[type="range"]::-moz-range-progress {
-    height: 14px;
+    height: 22px;
     background: #f28a00;
 }
 
 .track-volume input[type="range"]::-moz-range-thumb {
-    width: 3px;
-    height: 14px;
+    width: 5px;
+    height: 22px;
     border: 0;
     border-radius: 0;
     background: #5f6874;
@@ -2652,11 +2664,6 @@ h3 {
     color: #1d2430;
 }
 
-.radiograph-save-library {
-    width: 100%;
-    margin-top: 10px;
-}
-
 .radiograph-comments {
     display: grid;
     gap: 8px;
@@ -2707,6 +2714,22 @@ h3 {
     gap: 8px;
 }
 
+.radiograph-comment-form > button {
+    justify-self: end;
+}
+
+.radiograph-comment-feedback {
+    overflow-wrap: anywhere;
+}
+
+.radiograph-comment-feedback .radiograph-status {
+    margin-top: 0;
+}
+
+.radiograph-comment-feedback .radiograph-status + .radiograph-status:not(:empty) {
+    margin-top: 4px;
+}
+
 .radiograph-comment-form input {
     min-width: 0;
     height: 36px;
@@ -2729,6 +2752,16 @@ h3 {
 .radiograph-action--primary {
     background: #4b8ee8;
     border-color: #79b4ff;
+    color: #ffffff;
+}
+
+.radiograph-save-library {
+    align-self: start;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-transform: uppercase;
+    background: #a02a2a;
+    border-color: #d47979;
     color: #ffffff;
 }
 

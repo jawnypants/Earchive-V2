@@ -189,6 +189,7 @@ const radiographSubmitStatus = document.getElementById("radiograph-submit-status
 const radiographRatingStatus = document.getElementById("radiograph-rating-status");
 const radiographRatingButtons = Array.from(document.querySelectorAll("[data-radiograph-rating]"));
 const radiographSaveLibraryButton = document.getElementById("radiograph-save-library");
+const radiographSaveLibraryStatus = document.getElementById("radiograph-save-library-status");
 const radiographNowTitle = document.getElementById("radiograph-now-title");
 const radiographNowMeta = document.getElementById("radiograph-now-meta");
 const radiographRotationRank = document.getElementById("radiograph-rotation-rank");
@@ -308,6 +309,7 @@ let currentRadiographTrackId = null;
 let currentRadiographFile = "";
 let currentRadiographStartedAt = "";
 let currentRadiographHasRecipe = false;
+let radiographLibrarySaveInProgress = false;
 let currentRadiographCreatorName = "";
 let radiographRatingSyncToken = 0;
 let radiographCommentsSyncToken = 0;
@@ -924,8 +926,8 @@ function updateRadiographSaveLibraryButton() {
     if (!radiographSaveLibraryButton) {
         return;
     }
-    const canSave = Boolean(currentRadiographFile && currentRadiographHasRecipe && currentSupabaseUser?.id);
-    radiographSaveLibraryButton.disabled = !canSave;
+    radiographSaveLibraryButton.disabled = radiographLibrarySaveInProgress
+        || !supabaseClient || !currentRadiographFile || !currentRadiographHasRecipe;
 }
 
 async function syncRadiographCurrentTrackRating(fileName = currentRadiographFile) {
@@ -1625,41 +1627,34 @@ async function fetchRadiographRecipePayload(fileName) {
     return result;
 }
 
-async function saveCurrentRadiographToLibrary() {
-    if (!supabaseClient || !currentSupabaseUser?.id) {
-        showAuthModal();
-        throw new Error("Sign in to save this broadcast to your Library.");
-    }
-    if (!currentRadiographFile) {
-        throw new Error("No RadioGraph broadcast is selected.");
-    }
-    if (!currentRadiographFile.startsWith("radiograph-")) {
-        throw new Error("This broadcast does not have a saved MIDI recipe.");
-    }
-    const recipeResult = await fetchRadiographRecipePayload(currentRadiographFile);
+async function saveCurrentRadiographToLibrary(userId) {
+    const file = currentRadiographFile;
+    const trackId = currentRadiographTrackId;
+    const creatorName = currentRadiographCreatorName;
+    const savedCreatorName = getRadiographCreatorName();
+    const recipeResult = await fetchRadiographRecipePayload(file);
+    if (currentSupabaseUser?.id !== userId) return null;
+
     const payload = recipeResult.payload || {};
     const recipe = payload.recipe || recipeResult.recipe || null;
     const midiPayload = payload.midi_payload || recipeResult.midi_payload || null;
     if (!midiPayload || midiPayload.encoding !== "base64" || !midiPayload.midi_base64) {
         throw new Error("This broadcast recipe does not include reusable MIDI data.");
     }
-    const title = recipe?.midi?.name
-        || payload.title
-        || recipeResult.title
-        || formatRadioTrackName(currentRadiographFile);
+    const title = payload.title || recipeResult.title || recipe?.midi?.name || formatRadioTrackName(file);
+    const originalMeta = payload.midi_meta || recipeResult.midi_meta || {};
     const originalCreatorName = payload.creator_name
         || recipeResult.creator_name
-        || payload.midi_meta?.creator_name
-        || currentRadiographCreatorName
+        || originalMeta.creator_name
+        || creatorName
         || null;
-    const savedCreatorName = getRadiographCreatorName();
     const midiMeta = {
-        ...(payload.midi_meta || {}),
+        ...originalMeta,
         saved_from: "radiograph",
-        radio_track_file: currentRadiographFile,
-        radio_track_id: currentRadiographTrackId,
+        radio_track_file: file,
+        radio_track_id: trackId,
         creator_name: savedCreatorName,
-        creator_user_id: currentSupabaseUser.id,
+        creator_user_id: userId,
         source_creator_name: originalCreatorName,
         radio_original_creator_name: originalCreatorName,
         radio_recipe: recipe,
@@ -1668,17 +1663,17 @@ async function saveCurrentRadiographToLibrary() {
     const { data, error } = await supabaseClient
         .from("earb_user_midis")
         .insert({
-            user_id: currentSupabaseUser.id,
+            user_id: userId,
             name: title,
             midi_payload: midiPayload,
             midi_meta: midiMeta
         })
-        .select("id,name")
+        .select("id,name,midi_payload,midi_meta,created_at")
         .single();
-    if (error) {
-        throw error;
-    }
-    await loadLibrarianSavedSongs({ force: true, showStatus: false });
+    if (error) throw error;
+
+    if (currentSupabaseUser?.id !== userId) return null;
+    mergeSavedSongRecordsIntoLibrarian([data]);
     return data;
 }
 
@@ -2042,7 +2037,7 @@ librarianTagsDialog.querySelector("form").addEventListener("submit", async (even
         if (index >= 0) {
             const record = librarianItems[index].record;
             const updated = { ...record, midi_meta: { ...record.midi_meta, tags } };
-            librarianItems[index] = buildLibrarianItemFromRecord(updated, index, item.source);
+            librarianItems[index] = buildLibrarianItemFromRecord(updated, index);
         }
         if (activeLoadedLibrarianItemId === item.id && currentMidiSource) currentMidiSource.tags = tags;
         setActiveLibrarianItem(activeLibrarianItemId, { queue: false });
@@ -2167,11 +2162,15 @@ function moveQueueItem(fromIndex, toIndex) {
     setLibrarianStatus("Queue order updated.");
 }
 
-function buildLibrarianItemFromRecord(record, index = 0, source = "saved") {
+function buildLibrarianItemFromRecord(record, index = 0) {
     const meta = record?.midi_meta && typeof record.midi_meta === "object" ? record.midi_meta : {};
+    const source = meta.saved_from === "radiograph" ? "broadcast" : "saved";
     const payload = record?.midi_payload && typeof record.midi_payload === "object" ? record.midi_payload : {};
     const title = record?.name || meta.name || payload.file_name || "Untitled song";
-    const creatorName = typeof meta.creator_name === "string" ? meta.creator_name.trim() : "";
+    const creator = source === "broadcast"
+        ? meta.source_creator_name || meta.radio_original_creator_name || meta.creator_name
+        : meta.creator_name;
+    const creatorName = typeof creator === "string" ? creator.trim() : "";
     const duration = Number.isFinite(Number(meta.duration_seconds))
         ? formatDuration(Number(meta.duration_seconds))
         : "";
@@ -2194,11 +2193,11 @@ function buildLibrarianItemFromRecord(record, index = 0, source = "saved") {
     };
 }
 
-function mergeSavedSongRecordsIntoLibrarian(records, source = "saved") {
+function mergeSavedSongRecordsIntoLibrarian(records) {
     if (!Array.isArray(records) || !records.length) {
         return;
     }
-    const savedItems = records.map((record, index) => buildLibrarianItemFromRecord(record, index, source));
+    const savedItems = records.map((record, index) => buildLibrarianItemFromRecord(record, index));
     const savedIds = new Set(savedItems.map(item => item.id));
     librarianItems = savedItems.concat(librarianItems.filter(item => !savedIds.has(item.id)));
     if (!activeLibrarianItemId && librarianItems.length) {
@@ -2781,24 +2780,27 @@ radiographSubmitButton.addEventListener("click", async () => {
 
 if (radiographSaveLibraryButton) {
     radiographSaveLibraryButton.addEventListener("click", async () => {
-        radiographSaveLibraryButton.disabled = true;
-        if (radiographRatingStatus) {
-            radiographRatingStatus.textContent = "Saving broadcast to your Library...";
-            radiographRatingStatus.classList.remove("error");
+        if (radiographLibrarySaveInProgress || !currentRadiographFile || !currentRadiographHasRecipe) return;
+        const userId = currentSupabaseUser?.id;
+        if (!userId) {
+            showAuthModal();
+            return;
         }
+        radiographLibrarySaveInProgress = true;
+        updateRadiographSaveLibraryButton();
+        radiographSaveLibraryStatus.textContent = "Saving arrangement…";
+        radiographSaveLibraryStatus.classList.remove("error");
         try {
-            const saved = await saveCurrentRadiographToLibrary();
-            if (radiographRatingStatus) {
-                radiographRatingStatus.textContent = `${saved?.name || "Broadcast"} saved to your Library.`;
-                radiographRatingStatus.classList.remove("error");
-            }
+            const saved = await saveCurrentRadiographToLibrary(userId);
+            if (saved) radiographSaveLibraryStatus.textContent = `“${saved.name}” saved to Songs in the Librarian.`;
         } catch (error) {
             console.warn("RadioGraph library save failed:", error);
-            if (radiographRatingStatus) {
-                radiographRatingStatus.textContent = error?.message || "Unable to save this broadcast to your Library.";
-                radiographRatingStatus.classList.add("error");
+            if (currentSupabaseUser?.id === userId) {
+                radiographSaveLibraryStatus.textContent = error?.message || "Unable to save this broadcast to your Library.";
+                radiographSaveLibraryStatus.classList.add("error");
             }
         } finally {
+            radiographLibrarySaveInProgress = false;
             updateRadiographSaveLibraryButton();
         }
     });
@@ -3430,6 +3432,8 @@ function updateAuthUiForUser(user) {
     currentSupabaseUser = user || null;
     syncControlHelpPreference();
     if (previousUserId !== currentSupabaseUser?.id) {
+        radiographSaveLibraryStatus.textContent = "";
+        radiographSaveLibraryStatus.classList.remove("error");
         syncStationOperator(currentSupabaseUser?.id);
         librarianTagsDialog.close();
         radiographBroadcast = null;
@@ -5304,6 +5308,8 @@ function renderInstrumentMenus() {
         volumeValue.textContent = formatTrackVolumeLabel(initialVolume);
         const volumeInput = document.createElement("input");
         volumeInput.type = "range";
+        volumeLabel.setAttribute("aria-hidden", "true");
+        volumeInput.setAttribute("aria-label", `Volume for ${track.name}`);
         volumeInput.dataset.help = "Adjust this track’s loudness independently of the other tracks.";
         volumeInput.min = TRACK_VOLUME_RANGE.min.toString();
         volumeInput.max = TRACK_VOLUME_RANGE.max.toString();
@@ -7653,7 +7659,10 @@ async function saveArrangementToLibrary(arrangementName, tags = currentMidiSourc
     if (saveArrangementButton) {
         saveArrangementButton.disabled = true;
     }
-    const sourceAtSave = currentMidiSource;
+    const songAtSave = currentSong;
+    const selectionAtSave = latestSelectionToken;
+    const userId = currentSupabaseUser.id;
+    const isCurrentSong = () => currentSong === songAtSave && latestSelectionToken === selectionAtSave;
     try {
         if (pendingArrangementRefresh) {
             const refresh = pendingArrangementRefresh;
@@ -7661,41 +7670,44 @@ async function saveArrangementToLibrary(arrangementName, tags = currentMidiSourc
             pendingArrangementRefresh = null;
             await rebuildTransformedPlayback(refresh.label || "Arrangement updated.", refresh);
         }
+        if (!isCurrentSong() || currentSupabaseUser?.id !== userId) {
+            throw new Error("The loaded song or account changed before the arrangement could be saved.");
+        }
         const midiToSave = arrangementKeyframes.length > 1
             ? baseMidiBuffer
             : (arrangementDirty && transformedMidiBuffer ? transformedMidiBuffer : currentMidiBuffer);
-        const savedDisplayName = arrangementName;
         const savedSource = { source_type: "upload", file_name: buildArrangementFileName(arrangementName) };
         const savedRecord = await withTimeout(
-            saveLoadedMidiToCloud(
-                midiToSave,
-                savedDisplayName,
-                savedSource,
-                currentSong,
-                tags
-            ),
+            saveLoadedMidiToCloud(midiToSave, arrangementName, savedSource, songAtSave, tags),
             CLOUD_SAVE_TIMEOUT_MS,
             "Saving arrangement timed out. Check your Supabase table/policies and try again."
         );
-        if (savedRecord) {
-            if (sourceAtSave && currentMidiSource === sourceAtSave) sourceAtSave.tags = getArrangementTags(savedRecord);
-            mergeSavedSongRecordsIntoLibrarian([savedRecord], "saved");
-            setActiveLibrarianItem(`saved-${savedRecord.id || savedRecord.name || savedDisplayName}`, { queue: false });
-        }
+        if (currentSupabaseUser?.id !== userId) return;
+        mergeSavedSongRecordsIntoLibrarian([savedRecord]);
+        if (!isCurrentSong()) return;
+
+        if (currentMidiSource) currentMidiSource.tags = getArrangementTags(savedRecord);
+        currentSong.displayName = savedRecord.name;
+        setSongTitle(savedRecord.name);
+        updateSongInstrumentSummary();
+        setActiveLibrarianItem(`saved-${savedRecord.id}`, { queue: false });
         await withTimeout(
             flushCloudSettingsSave(),
             CLOUD_SAVE_TIMEOUT_MS,
             "Cloud settings save timed out. Check your Supabase connection and try again."
         );
-        setStatus(`Arrangement saved: ${savedDisplayName}`, false);
+        if (isCurrentSong() && currentSupabaseUser?.id === userId) {
+            setStatus(`Arrangement saved: ${savedRecord.name}`, false);
+        }
     } finally {
         setSaveArrangementEnabled(true);
     }
 }
 
 async function saveLoadedMidiToCloud(arrayBuffer, displayName, source, parsedSong, tags) {
-    if (!supabaseClient || !currentSupabaseUser?.id || !arrayBuffer) {
-        return;
+    const userId = currentSupabaseUser?.id;
+    if (!supabaseClient || !userId || !arrayBuffer) {
+        throw new Error("You must be signed in with a MIDI loaded to save an arrangement.");
     }
     const payload = buildMidiPayload(source, arrayBuffer);
     const meta = {
@@ -7703,7 +7715,7 @@ async function saveLoadedMidiToCloud(arrayBuffer, displayName, source, parsedSon
         arrangement_settings: arrangementKeyframes[0]
             ? structuredClone(arrangementKeyframes[0].settings)
             : buildArrangementSettingsSnapshot(),
-        broadcast_recipe: buildMidiSettingsDraft(),
+        broadcast_recipe: buildMidiSettingsDraft(displayName),
         source_sample_id: currentMidiSource?.sample_id || null,
         source_folder: getMidiSourceFolder(currentMidiSource),
         tags: normalizeArrangementTags(tags)
@@ -7711,7 +7723,7 @@ async function saveLoadedMidiToCloud(arrayBuffer, displayName, source, parsedSon
     const { data: existingRows, error: lookupError } = await supabaseClient
         .from("earb_user_midis")
         .select("id")
-        .eq("user_id", currentSupabaseUser.id)
+        .eq("user_id", userId)
         .eq("name", meta.name)
         .order("created_at", { ascending: false })
         .limit(1);
@@ -7720,46 +7732,35 @@ async function saveLoadedMidiToCloud(arrayBuffer, displayName, source, parsedSon
     }
     const existingId = Array.isArray(existingRows) && existingRows.length ? existingRows[0].id : null;
     if (existingId) {
-        const { data: updatedRows, error: updateError } = await supabaseClient
+        const { data: updatedRecord, error: updateError } = await supabaseClient
             .from("earb_user_midis")
             .update({
                 midi_payload: payload,
                 midi_meta: meta
             })
             .eq("id", existingId)
-            .eq("user_id", currentSupabaseUser.id)
-            .select("id,name,midi_payload,midi_meta,created_at");
+            .eq("user_id", userId)
+            .select("id,name,midi_payload,midi_meta,created_at")
+            .single();
         if (updateError) {
             throw updateError;
         }
-        return Array.isArray(updatedRows) && updatedRows.length
-            ? updatedRows[0]
-            : {
-                id: existingId,
-                name: meta.name,
-                midi_payload: payload,
-                midi_meta: meta
-            };
+        return updatedRecord;
     }
-    const { data: insertedRows, error: insertError } = await supabaseClient
+    const { data: insertedRecord, error: insertError } = await supabaseClient
         .from("earb_user_midis")
         .insert({
-            user_id: currentSupabaseUser.id,
+            user_id: userId,
             name: meta.name,
             midi_payload: payload,
             midi_meta: meta
         })
-        .select("id,name,midi_payload,midi_meta,created_at");
+        .select("id,name,midi_payload,midi_meta,created_at")
+        .single();
     if (insertError) {
         throw insertError;
     }
-    return Array.isArray(insertedRows) && insertedRows.length
-        ? insertedRows[0]
-        : {
-            name: meta.name,
-            midi_payload: payload,
-            midi_meta: meta
-        };
+    return insertedRecord;
 }
 
 async function loadCloudMidiRecord(record, options = {}) {
@@ -8017,7 +8018,7 @@ function buildRadioKeyframes(frames, baseBpm) {
     });
 }
 
-function buildMidiSettingsDraft() {
+function buildMidiSettingsDraft(displayName = currentSong?.displayName) {
     if (!currentSong || !baseMidiBuffer) return null;
     const initialFrame = arrangementKeyframes.length > 1 ? arrangementKeyframes[0] : null;
     const settings = initialFrame?.settings || buildArrangementSettingsSnapshot();
@@ -8026,7 +8027,7 @@ function buildMidiSettingsDraft() {
         channel, bank_msb, bank_lsb: 0, program
     })).sort((a, b) => a.channel - b.channel);
     const recipe = createMidiSettingsDraft({
-        name: currentSong.displayName || currentSong.name || "midi",
+        name: displayName || currentSong.name || "midi",
         byteLength: baseMidiBuffer.byteLength,
         tuning: buildRadioTuningRecipe(initialFrame?.tuning || activeTuning, settings.mode, settings.transpose_semitones),
         mode: settings.mode,

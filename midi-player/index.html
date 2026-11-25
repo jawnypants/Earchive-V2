@@ -357,7 +357,6 @@
                             <button class="radiograph-rating-button" type="button" data-radiograph-rating="4" aria-label="Rate 4" data-help="Sign in to rate this broadcast. You can change your rating, and ratings affect how often songs are played.">4</button>
                             <button class="radiograph-rating-button" type="button" data-radiograph-rating="5" aria-label="Rate 5" data-help="Sign in to rate this broadcast. You can change your rating, and ratings affect how often songs are played.">5</button>
                         </div>
-                        <button id="radiograph-save-library" class="button radiograph-action radiograph-action--primary radiograph-save-library" type="button" disabled data-help="Save this broadcast under Saved From Broadcast in the Librarian so you can replay it or add it to a playlist.">SAVE CURRENT SONG TO MY LIBRARY</button>
                         <div class="radiograph-comments" aria-label="Comments for current broadcast">
                             <div id="radiograph-comments-list" class="radiograph-comments-list" data-help="Sign in to leave a comment on the current broadcast. Comments stay with the song when it plays again.">
                                 <div class="radiograph-comment-empty">Comments will appear here while this song is linked to RadioGraph.</div>
@@ -365,10 +364,14 @@
                             <div class="radiograph-comment-form">
                                 <input id="radiograph-comment-input" type="text" maxlength="500" placeholder="Comment on this song" data-help="Sign in to leave a comment on the current broadcast. Comments stay with the song when it plays again.">
                                 <button id="radiograph-comment-submit" class="button radiograph-action radiograph-action--primary" type="button" disabled data-help="Sign in to leave a comment on the current broadcast. Comments stay with the song when it plays again.">COMMENT</button>
+                                <div class="radiograph-comment-feedback">
+                                    <div id="radiograph-comment-status" class="inline-status radiograph-status" aria-live="polite">Sign in to comment on the current broadcast.</div>
+                                    <div id="radiograph-rating-status" class="inline-status radiograph-status" aria-live="polite">Ratings affect future rotation weight.</div>
+                                    <div id="radiograph-save-library-status" class="inline-status radiograph-status" role="status"></div>
+                                </div>
+                                <button id="radiograph-save-library" class="button radiograph-action radiograph-save-library" type="button" disabled data-help="Save this broadcast arrangement to Songs in the Librarian. Select a playlist and choose the song to add it to the queue.">Save Arrangement<br>To My Library</button>
                             </div>
-                            <div id="radiograph-comment-status" class="inline-status radiograph-status" aria-live="polite">Sign in to comment on the current broadcast.</div>
                         </div>
-                        <div id="radiograph-rating-status" class="inline-status radiograph-status" aria-live="polite">Ratings affect future rotation weight.</div>
                     </section>
 
                     <section class="panel radiograph-panel radiograph-panel--queue" aria-labelledby="radiograph-queue-heading">
