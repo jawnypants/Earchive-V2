@@ -206,6 +206,27 @@ const radiographCommentStatus = document.getElementById("radiograph-comment-stat
 const librarianCommentInput = document.getElementById("librarian-comment-input");
 const librarianCommentSubmit = document.getElementById("librarian-comment-submit");
 const librarianCommentStatus = document.getElementById("librarian-comment-status");
+const mobileLayout = window.matchMedia("(max-width: 720px)");
+const mobilePlayerToggle = document.getElementById("mobile-player-toggle");
+const mobileReturnTop = document.getElementById("mobile-return-top");
+const mobilePlayer = document.getElementById("mobile-player");
+const mobilePlayerSource = document.getElementById("mobile-player-source");
+const mobilePlayerTitle = document.getElementById("mobile-player-title");
+const mobilePlayerAudio = document.getElementById("mobile-player-audio");
+const mobilePlayerLibrary = document.getElementById("mobile-player-library");
+const mobilePlayerPlaylist = document.getElementById("mobile-player-playlist");
+const mobilePlayerQueueLabel = document.getElementById("mobile-player-queue-label");
+const mobilePlayerQueue = document.getElementById("mobile-player-queue");
+const mobilePlayerPrevious = document.getElementById("mobile-player-previous");
+const mobilePlayerPlay = document.getElementById("mobile-player-play");
+const mobilePlayerNext = document.getElementById("mobile-player-next");
+const mobilePlayerStatus = document.getElementById("mobile-player-status");
+let mobilePlayerPage = "";
+let mobilePlayerMode = "";
+let midiMonitorMuted = false;
+let radiographPlaybackRequested = false;
+let radiographPlaybackRequest = 0;
+let queuePlaybackActive = false;
 
 if (songTitle) {
     songTitle.classList.add("is-hidden");
@@ -228,6 +249,10 @@ function setActivePage(pageName) {
     pageViews.forEach((view) => {
         view.classList.toggle("is-active", view.dataset.pageView === pageName);
     });
+    const audioPage = pageName === "radiograph" || pageName === "librarian" ? pageName : "";
+    mobilePlayerPage = audioPage;
+    if (!mobilePlayer.hidden && audioPage) showMobilePlayer(audioPage);
+    mobilePlayerToggle.hidden = !audioPage && mobilePlayer.hidden;
     if (pageName === "radiograph") {
         setTimeout(refreshRadiographStationStatus, 0);
     }
@@ -246,7 +271,9 @@ function setActivePage(pageName) {
 if (pageTabs.length && pageViews.length) {
     pageTabs.forEach((tab) => {
         tab.addEventListener("click", () => {
+            const changed = !tab.classList.contains("is-active");
             setActivePage(tab.dataset.page || "recomposer");
+            if (changed && mobileLayout.matches) window.scrollTo(0, 0);
         });
     });
     const initiallyActiveTab = pageTabs.find(tab => tab.classList.contains("is-active"));
@@ -326,6 +353,7 @@ function setRadiographStatus(message, isError = false) {
         radiographStatus.textContent = message;
         radiographStatus.classList.toggle("error", Boolean(isError));
     }
+    if (mobilePlayerMode === "radiograph") mobilePlayerStatus.textContent = isError ? message : "";
 }
 
 function setRadiographLiveState(state) {
@@ -349,6 +377,7 @@ function setRadiographLiveState(state) {
         stopRadiographVolumeMeter();
         resetRadiographVolumeBars();
     }
+    updateMobilePlayerDisplay();
 }
 
 function resetRadiographVolumeBars() {
@@ -875,6 +904,7 @@ function renderRadiographNowPlaying(status, now) {
             ? now.track_title || currentTrack?.title || formatRadioTrackName(currentFile)
             : "Waiting for station status";
     }
+    updateMobilePlayerDisplay();
     if (radiographRotationRank) {
         const index = tracks.findIndex(track => (typeof track === "string" ? track : track?.file) === currentFile);
         radiographRotationRank.textContent = index >= 0 ? `Rotation #${index + 1}` : "Rotation sync";
@@ -1302,6 +1332,7 @@ function setupRadiographStream() {
                 radiographHls.recoverMediaError();
                 return;
             }
+            pauseRadiographPlayback();
             setRadiographStatus("Live stream error. Reconnect to rebuild the HLS player.", true);
             setRadiographLiveState("error");
         });
@@ -1335,38 +1366,60 @@ function updateRadiographBroadcastPanel({ preserveSubmitStatus = false } = {}) {
     }
 }
 
+function updateMidiMonitor() {
+    fluidRenderer.setMonitorMuted((midiMonitorMuted && queuePlaybackActive) || radiographPlaybackRequested);
+}
+
 async function playRadiographStream() {
+    if (recordingActive) {
+        setRadiographStatus("Finish recording before starting live radio.", true);
+        return;
+    }
+    if (radiographPlaybackRequested) return;
     if (!setupRadiographStream()) {
         setRadiographStatus("Radio stream endpoint is not configured yet.", true);
         setRadiographLiveState("error");
         return;
     }
+
+    const request = ++radiographPlaybackRequest;
+    radiographPlaybackRequested = true;
+    updateMidiMonitor();
+    pausePlayback();
+    updateMobilePlayerDisplay();
     try {
         await radiographAudio.play();
-        if (radiographAudio.paused) return;
+        if (request !== radiographPlaybackRequest || radiographAudio.paused) return;
         startRadiographVolumeMeter();
         setRadiographStatus("Live radio is playing.");
         setRadiographLiveState("live");
         updateRadiographCountdown();
     } catch (error) {
-        if (error?.name === "AbortError" && radiographAudio.paused) return;
+        if (request !== radiographPlaybackRequest) return;
+        pauseRadiographPlayback();
+        if (error?.name === "AbortError") return;
         console.warn("Radio stream playback failed:", error);
         setRadiographStatus("Browser blocked or lost the live stream. Use reconnect after audio is allowed.", true);
         setRadiographLiveState("error");
     }
 }
 
-function toggleRadiographPlayback() {
-    if (!radiographAudio || radiographAudio.paused) {
-        playRadiographStream();
-        return;
-    }
+function pauseRadiographPlayback() {
+    if (!radiographAudio || (!radiographPlaybackRequested && radiographAudio.paused)) return;
+    radiographPlaybackRequest++;
+    radiographPlaybackRequested = false;
     clearTimeout(radiographRecoveryTimer);
     radiographRecoveryTimer = null;
     radiographAudio.pause();
     radiographHls?.stopLoad();
+    updateMidiMonitor();
     setRadiographStatus("Live radio paused.");
     setRadiographLiveState("standby");
+}
+
+function toggleRadiographPlayback() {
+    if (radiographPlaybackRequested) pauseRadiographPlayback();
+    else playRadiographStream();
 }
 
 function reconnectRadiographStream(message = "Reconnecting live radio...") {
@@ -1374,8 +1427,8 @@ function reconnectRadiographStream(message = "Reconnecting live radio...") {
         setRadiographStatus("Radio stream endpoint is not configured yet.", true);
         return;
     }
+    pauseRadiographPlayback();
     setRadiographStatus(message);
-    radiographAudio.pause();
     destroyRadiographHls();
     radiographAudio.removeAttribute("src");
     radiographAudio.load();
@@ -1683,6 +1736,7 @@ function setLibrarianStatus(message, isError = false) {
     }
     librarianStatus.textContent = message;
     librarianStatus.classList.toggle("error", Boolean(isError));
+    if (mobilePlayerMode === "librarian") mobilePlayerStatus.textContent = isError ? message : "";
 }
 
 function getActiveLibrarianItem() {
@@ -1845,7 +1899,7 @@ function setActivePlaylist(playlistId) {
     }
     if (loopToggle) {
         loopToggle.checked = true;
-        fluidRenderer.setLoopEnabled(true);
+        fluidRenderer.setLoopEnabled(!queuePlaybackActive);
     }
     renderLibrarianPlaylists();
     renderLibrarianQueue();
@@ -1900,6 +1954,8 @@ async function loadLibrarianItemRecord(item, options = {}) {
     }
     const token = ++activeLibrarianLoadToken;
     const wasPlaying = Boolean(options.playAfterLoad || isPlaying);
+    if (options.playAfterLoad) pauseRadiographPlayback();
+    const radioRequest = radiographPlaybackRequest;
     setLibrarianStatus(`Loading ${item.title}...`);
     try {
         const loaded = await loadCloudMidiRecord(item.record, {
@@ -1915,8 +1971,8 @@ async function loadLibrarianItemRecord(item, options = {}) {
         activeLoadedLibrarianItemId = item.id;
         setLibrarianStatus(`${item.title} loaded.`);
         updateQueueTransportControls();
-        if (wasPlaying) {
-            playButton?.click();
+        if (wasPlaying && radioRequest === radiographPlaybackRequest && !radiographPlaybackRequested) {
+            play({ queue: true });
         }
         return true;
     } catch (error) {
@@ -2053,6 +2109,7 @@ librarianTagsDialog.querySelector("form").addEventListener("submit", async (even
 });
 
 function renderLibrarianQueue() {
+    renderMobilePlayerQueue();
     if (!librarianQueue) {
         return;
     }
@@ -2418,12 +2475,11 @@ function restartLoadedSongFromBeginning() {
         return false;
     }
     const wasPlaying = isPlaying;
+    const queue = queuePlaybackActive;
     stopPlayback(false);
     pauseOffset = 0;
     updateProgressUI(0);
-    if (wasPlaying) {
-        play();
-    }
+    if (wasPlaying) play({ queue });
     setTimeout(updateQueueTransportControls, 0);
     return true;
 }
@@ -2462,6 +2518,7 @@ async function handleQueueNext() {
 }
 
 function updateQueueTransportControls() {
+    updateMobilePlayerDisplay();
     if (!queuePlayToggleButton) {
         return;
     }
@@ -2477,12 +2534,17 @@ function updateQueueTransportControls() {
 function toggleQueueShuffleMode() {
     queueShuffleEnabled = !queueShuffleEnabled;
     updateQueueTransportControls();
+    renderMobilePlayerQueue();
     queueLibrarianPlaylistSave();
     setLibrarianStatus(queueShuffleEnabled ? "Shuffle mode is on." : "Play next mode is on.");
 }
 
 function triggerQueuePlayToggle() {
-    const item = getActiveLibrarianItem();
+    if (isPlaying && queuePlaybackActive) {
+        pausePlayback();
+        return;
+    }
+    const item = getActiveLibrarianItem() || getQueueItems()[0];
     if (!currentSong) {
         if (item?.record) {
             activateLibrarianSong(item.id, { queue: false, playAfterLoad: true });
@@ -2495,12 +2557,8 @@ function triggerQueuePlayToggle() {
         activateLibrarianSong(item.id, { queue: false, playAfterLoad: true });
         return;
     }
-    if (isPlaying) {
-        pauseButton?.click();
-    } else {
-        playButton?.click();
-    }
-    setTimeout(updateQueueTransportControls, 0);
+    if (isPlaying) pausePlayback();
+    else play({ queue: true });
 }
 
 function flashQueueTransportButton(button) {
@@ -2595,6 +2653,127 @@ if (playlistDeleteConfirm) {
     playlistDeleteConfirm.addEventListener("click", deleteActivePlaylist);
 }
 
+function updateMobilePlayerDisplay() {
+    if (mobilePlayer.hidden) return;
+    const radio = mobilePlayerMode === "radiograph";
+    const title = radio ? radiographNowTitle.textContent : songTitle.textContent || "No song selected";
+    if (mobilePlayerTitle.textContent !== title) mobilePlayerTitle.textContent = title;
+    const audioOn = radio ? radiographPlaybackRequested && !radiographAudio.muted : audioReady && !midiMonitorMuted;
+    mobilePlayerAudio.textContent = audioOn ? "Audio Off" : "Audio";
+    mobilePlayerAudio.setAttribute("aria-label", radio
+        ? (audioOn ? "Pause live radio" : "Play live radio")
+        : (audioOn ? "Mute Librarian audio" : "Enable Librarian audio"));
+    mobilePlayerPlay.textContent = isPlaying && !radio ? "Pause" : "Play";
+}
+
+function renderMobilePlayerQueue() {
+    if (mobilePlayer.hidden || mobilePlayerMode !== "librarian") return;
+    const activeSong = document.activeElement?.dataset.mobileSong;
+    const scrollTop = mobilePlayerQueue.scrollTop;
+    mobilePlayerPlaylist.replaceChildren(...librarianPlaylistsState.map(playlist => new Option(playlist.name, playlist.id)));
+    mobilePlayerPlaylist.value = activePlaylistId;
+    mobilePlayerQueueLabel.textContent = queueShuffleEnabled ? "Queue · Shuffle on" : "Queue";
+    const queue = getQueueItems();
+    let focusTarget;
+    mobilePlayerQueue.replaceChildren(...queue.map((item, index) => {
+        const li = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.mobileSong = item.id;
+        button.textContent = `${index + 1}. ${item.title}`;
+        if (item.id === activeLibrarianItemId) button.setAttribute("aria-current", "true");
+        if (item.id === activeSong) focusTarget = button;
+        button.addEventListener("click", () => {
+            if (!recordingActive) selectQueueIndex(index, { playAfterLoad: isPlaying });
+        });
+        li.append(button);
+        return li;
+    }));
+    if (!queue.length) {
+        const empty = document.createElement("li");
+        empty.textContent = "No songs in this playlist.";
+        mobilePlayerQueue.append(empty);
+    }
+    mobilePlayerQueue.scrollTop = scrollTop;
+    focusTarget?.focus({ preventScroll: true });
+    mobilePlayerPrevious.disabled = mobilePlayerNext.disabled = !queue.length;
+    mobilePlayerPlay.disabled = !queue.length && !currentSong;
+    updateMobilePlayerDisplay();
+}
+
+function showMobilePlayer(mode) {
+    if (mobilePlayerMode !== mode) mobilePlayerStatus.textContent = "";
+    mobilePlayerMode = mode;
+    mobilePlayer.hidden = false;
+    mobilePlayerToggle.hidden = false;
+    mobilePlayerToggle.textContent = "Close mini-player";
+    mobilePlayerToggle.setAttribute("aria-expanded", "true");
+    mobilePlayerSource.textContent = `${mode === "radiograph" ? "RadioGraph" : "Librarian"} · Now Playing`;
+    mobilePlayerLibrary.hidden = mode !== "librarian";
+    renderMobilePlayerQueue();
+    updateMobilePlayerDisplay();
+}
+
+mobilePlayerToggle.addEventListener("click", () => {
+    if (mobilePlayer.hidden) {
+        if (mobilePlayerPage) showMobilePlayer(mobilePlayerPage);
+        return;
+    }
+    mobilePlayer.hidden = true;
+    mobilePlayerToggle.hidden = !mobilePlayerPage;
+    mobilePlayerToggle.textContent = "Mini-player";
+    mobilePlayerToggle.setAttribute("aria-expanded", "false");
+});
+
+mobilePlayerAudio.addEventListener("click", async () => {
+    if (mobilePlayerMode === "radiograph") {
+        if (radiographAudio.muted) {
+            setRadiographMuted(false);
+            if (radiographPlaybackRequested) return;
+        }
+        toggleRadiographPlayback();
+        return;
+    }
+    if (!audioReady || audioContext?.state !== "running") {
+        try {
+            await ensureAudioReady();
+            mobilePlayerStatus.textContent = "";
+        } catch (_) {
+            mobilePlayerStatus.textContent = "Audio could not be enabled. Tap Audio to try again.";
+            return;
+        }
+        midiMonitorMuted = false;
+    } else {
+        midiMonitorMuted = !midiMonitorMuted;
+    }
+    updateMidiMonitor();
+    updateMobilePlayerDisplay();
+});
+
+mobilePlayerPlaylist.addEventListener("change", () => {
+    const continuePlaying = isPlaying && queuePlaybackActive;
+    setActivePlaylist(mobilePlayerPlaylist.value);
+    if (!continuePlaying || recordingActive) return;
+    if (getQueueItems().length) selectQueueIndex(0, { playAfterLoad: true });
+    else pausePlayback();
+});
+mobilePlayerPrevious.addEventListener("click", () => {
+    if (!recordingActive) selectQueueOffset(-1, { playAfterLoad: isPlaying });
+});
+mobilePlayerPlay.addEventListener("click", () => {
+    if (!recordingActive) triggerQueuePlayToggle();
+});
+mobilePlayerNext.addEventListener("click", () => {
+    if (!recordingActive) handleQueueNext();
+});
+window.addEventListener("scroll", () => {
+    mobileReturnTop.hidden = window.scrollY < 160;
+}, { passive: true });
+mobileReturnTop.addEventListener("click", () => {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "instant" : "smooth" });
+});
+
 if (queuePreviousButton) {
     queuePreviousButton.addEventListener("click", () => {
         flashQueueTransportButton(queuePreviousButton);
@@ -2627,13 +2806,7 @@ document.addEventListener("keydown", handleGlobalPlaybackKeys);
 
 if (librarianPlayButton) {
     librarianPlayButton.addEventListener("click", () => {
-        if (!currentSong) {
-            const item = getActiveLibrarianItem();
-            setLibrarianStatus(item ? `${item.title} is selected. Load a MIDI file to play audio.` : "Load a MIDI file to play audio.", true);
-            return;
-        }
-        playButton?.click();
-        setTimeout(updateQueueTransportControls, 0);
+        if (!isPlaying) triggerQueuePlayToggle();
     });
 }
 
@@ -2698,16 +2871,16 @@ if (radiographPlayButton) {
     radiographPlayButton.addEventListener("click", toggleRadiographPlayback);
 }
 
+function setRadiographMuted(muted) {
+    radiographAudio.muted = muted;
+    radiographMuteButton.classList.toggle("is-muted", muted);
+    radiographMuteButton.setAttribute("aria-pressed", String(muted));
+    setRadiographStatus(muted ? "Live radio muted." : "Live radio unmuted.");
+    updateMobilePlayerDisplay();
+}
+
 if (radiographMuteButton) {
-    radiographMuteButton.addEventListener("click", () => {
-        if (!radiographAudio) {
-            return;
-        }
-        radiographAudio.muted = !radiographAudio.muted;
-        radiographMuteButton.classList.toggle("is-muted", radiographAudio.muted);
-        radiographMuteButton.setAttribute("aria-pressed", radiographAudio.muted ? "true" : "false");
-        setRadiographStatus(radiographAudio.muted ? "Live radio muted." : "Live radio unmuted.");
-    });
+    radiographMuteButton.addEventListener("click", () => setRadiographMuted(!radiographAudio.muted));
 }
 
 if (radiographReconnectButton) {
@@ -2718,6 +2891,10 @@ if (radiographReconnectButton) {
 
 if (radiographAudio) {
     radiographAudio.addEventListener("playing", () => {
+        if (!radiographPlaybackRequested) {
+            radiographAudio.pause();
+            return;
+        }
         if (radiographRecoveryTimer) {
             clearTimeout(radiographRecoveryTimer);
             radiographRecoveryTimer = null;
@@ -2728,14 +2905,20 @@ if (radiographAudio) {
         updateRadiographCountdown();
     });
     radiographAudio.addEventListener("pause", () => {
-        setRadiographLiveState("standby");
+        if (radiographPlaybackRequested && radiographAudio.paused && !radiographAudio.ended) {
+            pauseRadiographPlayback();
+        } else {
+            setRadiographLiveState("standby");
+        }
     });
     radiographAudio.addEventListener("error", () => {
+        if (!radiographPlaybackRequested) return;
+        pauseRadiographPlayback();
         setRadiographStatus("Live stream error. Reconnect when the endpoint is available.", true);
         setRadiographLiveState("error");
     });
     radiographAudio.addEventListener("ended", () => {
-        reconnectRadiographStream("Track boundary reached. Rejoining the live stream...");
+        if (radiographPlaybackRequested) reconnectRadiographStream("Rejoining the live stream...");
     });
     radiographAudio.addEventListener("stalled", () => {
         scheduleRadiographRecovery("Live stream stalled. Rejoining the broadcast...");
@@ -4365,8 +4548,17 @@ fluidRenderer.onPlaybackLoop = () => {
     if (!isUserScrubbing) updateProgressUI(0);
 };
 fluidRenderer.onPlaybackComplete = async () => {
+    const playlist = queuePlaybackActive && activeLoadedLibrarianItemId && getActivePlaylist();
+    const queueItems = playlist ? getQueueItems() : [];
+    const playedIndex = queueItems.findIndex(item => item.id === activeLoadedLibrarianItemId);
+    const next = playedIndex < 0 ? 0 : playedIndex + 1;
     if (recordingActive) await stopRecordingSession(true);
     stopPlayback(true);
+    if (queueItems.length && !radiographPlaybackRequested
+        && (next < queueItems.length || playlist.repeat)) {
+        const index = queueShuffleEnabled ? getNextQueueIndex(1) : next % queueItems.length;
+        await selectQueueIndex(index, { playAfterLoad: true });
+    }
 };
 
 let midiWorker = null;
@@ -4851,7 +5043,7 @@ stopButton.addEventListener("click", () => {
     setTimeout(updateQueueTransportControls, 0);
 });
 loopToggle.addEventListener("change", () => {
-    fluidRenderer.setLoopEnabled(loopToggle.checked);
+    fluidRenderer.setLoopEnabled(loopToggle.checked && !queuePlaybackActive);
 });
 if (recordButton) {
     recordButton.addEventListener("click", () => toggleRecording());
@@ -4877,7 +5069,7 @@ async function seekRecomposer(seconds) {
     pauseOffset = seconds;
     try {
         if (isPlaying) {
-            const success = await scheduleNotesFromOffset(seconds);
+            const success = await scheduleNotesFromOffset(seconds, request);
             if (request !== playbackRequest) return;
             if (success) {
                 pauseOffset = 0;
@@ -5446,8 +5638,8 @@ function updateSongInstrumentSummary() {
     });
 }
 
-async function play() {
-    if (!currentSong) {
+async function play({ queue = false } = {}) {
+    if (!currentSong || recordingActive) {
         return;
     }
     const request = ++playbackRequest;
@@ -5473,9 +5665,14 @@ async function play() {
         return;
     }
 
+    pauseRadiographPlayback();
+    queuePlaybackActive = queue;
+    updateMidiMonitor();
+    fluidRenderer.setLoopEnabled(loopToggle.checked && !queue);
     const offsetToUse = pauseOffset;
     applyAllProgramOverrides();
-    const scheduled = await scheduleNotesFromOffset(offsetToUse);
+    const scheduled = await scheduleNotesFromOffset(offsetToUse, request);
+    if (request !== playbackRequest) return;
     if (!scheduled) {
         console.warn("[Play] No schedulable notes");
         return;
@@ -5484,6 +5681,7 @@ async function play() {
     pauseOffset = 0;
     startProgressUpdates();
     setStatus("Playing...", false);
+    updateQueueTransportControls();
 }
 
 function pausePlayback() {
@@ -5500,6 +5698,7 @@ function pausePlayback() {
     stopProgressUpdates(false);
     isPlaying = false;
     setStatus("Paused", false);
+    updateQueueTransportControls();
 }
 
 function stopPlayback(autoTriggered) {
@@ -5507,6 +5706,8 @@ function stopPlayback(autoTriggered) {
         return;
     }
     playbackRequest++;
+    queuePlaybackActive = false;
+    updateMidiMonitor();
     isPlaying = false;
     pauseOffset = 0;
     playbackStartTime = 0;
@@ -5523,6 +5724,7 @@ function stopPlayback(autoTriggered) {
     }
     console.log(autoTriggered ? "[Play] Auto stop" : "[Play] Stop requested");
     setStatus(autoTriggered ? "Playback complete" : "Stopped", false);
+    updateQueueTransportControls();
 }
 
 function readSavedKeyframes(frames) {
@@ -5699,6 +5901,9 @@ keyframeConfirm.addEventListener("change", async () => {
 
 function resetPlaybackState() {
     playbackRequest++;
+    queuePlaybackActive = false;
+    updateMidiMonitor();
+    activeLoadedLibrarianItemId = null;
     clearTimeout(pendingArrangementRefresh?.timer);
     pendingArrangementRefresh = null;
     arrangementKeyframes = [];
@@ -5709,6 +5914,7 @@ function resetPlaybackState() {
     isPlaying = false;
     pauseOffset = 0;
     isPrepared = false;
+    updateQueueTransportControls();
     lastProgressUpdateTime = 0;
 }
 
@@ -6117,6 +6323,7 @@ function setAudioEnabledState(enabled) {
     if (enabled) {
         enableAudioButton.title = "Audio enabled";
     }
+    updateMobilePlayerDisplay();
 }
 
 function handleLoadFailure() {
@@ -6158,6 +6365,7 @@ function handleLoadFailure() {
     currentSongDefaultPreset = null;
     syncFavoriteSelection("__default__");
     setSaveArrangementEnabled(false);
+    updateQueueTransportControls();
 }
 
 function setSongTitle(titleText) {
@@ -6165,6 +6373,7 @@ function setSongTitle(titleText) {
     const text = titleText || "";
     songTitle.textContent = text;
     songTitle.classList.toggle("is-hidden", text.length === 0);
+    updateMobilePlayerDisplay();
 }
 
 function getAudioContext() {
@@ -6212,10 +6421,14 @@ function playConfirmationClick() {
     osc.stop(now + 0.25);
 }
 
-async function scheduleNotesFromOffset(offsetSeconds) {
+async function scheduleNotesFromOffset(offsetSeconds, request = playbackRequest) {
     try {
         dismissKeyframePrompt();
-        await fluidRenderer.playFrom(prepareKeyframesForPlayback(offsetSeconds));
+        const started = await fluidRenderer.playFrom(
+            prepareKeyframesForPlayback(offsetSeconds),
+            () => request === playbackRequest && !radiographPlaybackRequested
+        );
+        if (!started) return false;
         const ctx = getAudioContext();
         playbackStartTime = ctx.currentTime - offsetSeconds;
         logProgramAssignments(`playFrom offset ${offsetSeconds.toFixed(2)}`);
@@ -6450,6 +6663,7 @@ async function rebuildTransformedPlayback(message, { mixOnly = false } = {}) {
     setScaleControlsEnabled(false);
     setStatus("Updating arrangement...", false);
     const state = capturePlaybackState();
+    const request = playbackRequest;
     try {
         const playbackMidi = buildTransformedMidiBuffer(baseMidiBuffer);
         if (!mixOnly) {
@@ -6466,7 +6680,7 @@ async function rebuildTransformedPlayback(message, { mixOnly = false } = {}) {
             tempoSnapshot
         );
         await fluidRenderer.waitForTotalTicks?.();
-        fluidRenderer.setLoopEnabled(loopToggle.checked);
+        fluidRenderer.setLoopEnabled(loopToggle.checked && !queuePlaybackActive);
         applyTempoChange();
         applyActiveTuning();
         applyAllProgramOverrides();
@@ -6478,6 +6692,7 @@ async function rebuildTransformedPlayback(message, { mixOnly = false } = {}) {
             await fluidRenderer.seek(prepareKeyframesForPlayback(state.resumePoint));
             applyAllProgramOverrides();
             applyAllChannelVolumes();
+            if (request !== playbackRequest || radiographPlaybackRequested) return;
             fluidRenderer.resumePlayback();
             const ctx = getAudioContext();
             playbackStartTime = ctx.currentTime - state.resumePoint;
@@ -7335,6 +7550,7 @@ async function startRecordingSession() {
         return;
     }
 
+    pauseRadiographPlayback();
     // Reset playback to start and disable loop for the capture.
     previousLoopState = loopToggle.checked;
     loopToggle.checked = false;

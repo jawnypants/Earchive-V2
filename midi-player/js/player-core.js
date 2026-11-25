@@ -20,6 +20,8 @@
             this.audioNode = null;
             this.audioGeneration = 0;
             this.outputGain = null;
+            this.monitorGain = null;
+            this.monitorMuted = false;
             this.recordDestination = null;
             this.workletModulePromise = null;
             this.blockSize = 4096;
@@ -277,8 +279,9 @@
             this._applyStoredTuning(true);
         }
 
-        async playFrom(offsetSeconds) {
+        async playFrom(offsetSeconds, canStart = () => true) {
             await this.ensureInitialized(this.audioContext || getAudioContext());
+            if (!canStart()) return false;
             if (!this.playerPtr) {
                 throw new Error("No MIDI data loaded.");
             }
@@ -715,6 +718,11 @@
             this.updateRouting();
         }
 
+        setMonitorMuted(muted) {
+            this.monitorMuted = muted;
+            if (this.monitorGain) this.monitorGain.gain.value = muted ? 0 : 1;
+        }
+
         updateRouting() {
             if (!this.audioNode) {
                 return;
@@ -727,8 +735,14 @@
             } catch (e) {
                 // ignore
             }
+            if (!this.monitorGain) {
+                this.monitorGain = this.audioContext.createGain();
+                this.monitorGain.gain.value = this.monitorMuted ? 0 : 1;
+                this.monitorGain.connect(this.audioContext.destination);
+            }
+            this.outputGain.disconnect();
             this.audioNode.connect(this.outputGain);
-            this.outputGain.connect(this.audioContext.destination);
+            this.outputGain.connect(this.monitorGain);
             if (this.recordDestination) {
                 this.outputGain.connect(this.recordDestination);
             }

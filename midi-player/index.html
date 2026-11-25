@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Earchive of the Alternative Present</title>
-    <link rel="stylesheet" href="style.css?v=action-button-sizing">
+    <link rel="stylesheet" href="style.css?v=mobile-player">
 </head>
 <body>
     <header class="title-shell">
@@ -34,23 +34,56 @@
             </div>
         </div>
 
-        <div class="tabs-auth-row">
+    </header>
+
+    <div class="tabs-auth-row">
+        <nav class="app-tabs" aria-label="Earchive sections">
+            <button class="tab is-active" type="button" data-page="recomposer" aria-current="page" data-help="Open a MIDI file and change how it sounds.">Recomposer</button>
+            <button class="tab" type="button" data-page="librarian" data-help="Find your saved music, build playlists, and listen.">Librarian</button>
+            <button class="tab" type="button" data-page="radiograph" data-help="Listen to the live station, rate songs, or submit an arrangement.">RadioGraph</button>
+            <button id="station-control-tab" class="tab is-hidden" type="button" data-page="station-control" data-help="Manage the active RadioGraph show and publish news on Recomposer.">Control Panel</button>
+        </nav>
+        <div class="tabs-support">
             <div class="help-bubbles-toggle">
                 <span id="help-toggle-text">Show Help Bubbles</span>
                 <input id="help-toggle" type="checkbox" disabled aria-labelledby="help-toggle-text" autocomplete="off" data-help="Check the box to show tips when you hover over a control or reach it with the keyboard.">
             </div>
-            <nav class="app-tabs" aria-label="Earchive sections">
-                <button class="tab is-active" type="button" data-page="recomposer" aria-current="page" data-help="Open a MIDI file and change how it sounds.">Recomposer</button>
-                <button class="tab" type="button" data-page="librarian" data-help="Find your saved music, build playlists, and listen.">Librarian</button>
-                <button class="tab" type="button" data-page="radiograph" data-help="Listen to the live station, rate songs, or submit an arrangement.">RadioGraph</button>
-                <button id="station-control-tab" class="tab is-hidden" type="button" data-page="station-control" data-help="Manage the active RadioGraph show and publish news on Recomposer.">Control Panel</button>
-            </nav>
             <div class="auth-quick">
                 <button id="auth-launch" type="button" data-help="Sign in to save arrangements, publish, rate, and comment. Open Account to sign out.">Sign In</button>
                 <div id="auth-mini-status" class="auth-mini-status">Not signed in.</div>
             </div>
         </div>
-    </header>
+    </div>
+
+    <div class="mobile-dock">
+        <div class="mobile-dock__actions">
+            <button id="mobile-player-toggle" type="button" aria-controls="mobile-player" aria-expanded="false" hidden>Mini-player</button>
+            <button id="mobile-return-top" type="button" aria-label="Return to top" title="Return to top" hidden>↑</button>
+        </div>
+        <section id="mobile-player" class="mobile-player" aria-label="Mini-player" hidden>
+            <div class="mobile-player__now">
+                <div>
+                    <span id="mobile-player-source" class="mobile-player__source">Now Playing</span>
+                    <h2 id="mobile-player-title" aria-live="polite">No song selected</h2>
+                </div>
+                <button id="mobile-player-audio" type="button">Audio</button>
+            </div>
+            <div id="mobile-player-library" class="mobile-player__library" hidden>
+                <label class="mobile-player__playlist">
+                    <span>Playlist</span>
+                    <select id="mobile-player-playlist"></select>
+                </label>
+                <div id="mobile-player-queue-label" class="mobile-player__source">Queue</div>
+                <ol id="mobile-player-queue" class="mobile-player__queue" aria-labelledby="mobile-player-queue-label"></ol>
+                <div class="mobile-player__transport" role="group" aria-label="Playlist playback controls">
+                    <button id="mobile-player-previous" type="button">Previous</button>
+                    <button id="mobile-player-play" type="button">Play</button>
+                    <button id="mobile-player-next" type="button">Next</button>
+                </div>
+            </div>
+            <p id="mobile-player-status" class="mobile-player__status" role="status"></p>
+        </section>
+    </div>
 
     <dialog id="info-bubbles" class="site-info-dialog" aria-labelledby="site-info-title">
         <h2 id="site-info-title">About the Earchive</h2>
@@ -580,9 +613,9 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.3/dist/hls.min.js"></script>
     <script src="js/utils.js"></script>
-    <script src="js/player-core.js"></script>
+    <script src="js/player-core.js?v=mobile-player"></script>
     <script src="assets/vendor/midi-file/parse.js"></script>
     <script src="js/midi-source.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/app.js?v=mobile-player"></script>
 </body>
 </html>
