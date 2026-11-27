@@ -88,6 +88,15 @@ const favoriteDeleteMessage = document.getElementById("favorites-delete-message"
 const favoriteDeleteConfirmButton = document.getElementById("favorite-delete-confirm");
 const favoriteDeleteCancelButton = document.getElementById("favorite-delete-cancel");
 const authLaunchButton = document.getElementById("auth-launch");
+const authAccountHint = document.getElementById("auth-account-hint");
+const authAccountHintHide = document.getElementById("auth-account-hint-hide");
+const ACCOUNT_HINT_DISMISSED_KEY = "ear_account_hint_dismissed";
+let accountHintDismissed = false;
+try {
+    accountHintDismissed = localStorage.getItem(ACCOUNT_HINT_DISMISSED_KEY) === "true";
+} catch (_) {
+    // Show the tip by default when browser storage is unavailable.
+}
 const authMiniStatus = document.getElementById("auth-mini-status");
 const authModal = document.getElementById("auth-modal");
 const authCloseButton = document.getElementById("auth-close");
@@ -3600,9 +3609,34 @@ stationFolderTagForm.addEventListener("submit", async event => {
     }
 });
 
+function updateAccountHint() {
+    const show = !currentSupabaseUser?.id && !accountHintDismissed;
+    authAccountHint.hidden = !show;
+    const hintTextId = "auth-account-hint-text";
+    const descriptions = (authLaunchButton.getAttribute("aria-describedby") || "").split(/\s+/)
+        .filter(id => id && id !== hintTextId);
+    if (show) descriptions.push(hintTextId);
+    if (descriptions.length) authLaunchButton.setAttribute("aria-describedby", descriptions.join(" "));
+    else authLaunchButton.removeAttribute("aria-describedby");
+}
+
+authAccountHintHide.addEventListener("change", () => {
+    if (!authAccountHintHide.checked) return;
+    accountHintDismissed = true;
+    try {
+        localStorage.setItem(ACCOUNT_HINT_DISMISSED_KEY, "true");
+    } catch (_) {
+        // Keep the tip dismissed for the current page.
+    }
+    updateAccountHint();
+    authLaunchButton.focus({ preventScroll: true });
+    hideControlHelp();
+});
+
 function updateAuthUiForUser(user) {
     const previousUserId = currentSupabaseUser?.id;
     currentSupabaseUser = user || null;
+    updateAccountHint();
     syncControlHelpPreference();
     if (previousUserId !== currentSupabaseUser?.id) {
         radiographSaveLibraryStatus.textContent = "";
@@ -5237,6 +5271,7 @@ async function bootstrapApp() {
     applyAppConfig(config);
     refreshRadiographAudioSource();
     await initSupabaseAuth().finally(() => {
+        updateAccountHint();
         helpToggle.disabled = false;
         syncControlHelpPreference();
     });

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Earchive of the Alternative Present</title>
-    <link rel="stylesheet" href="style.css?v=radio-play-help">
+    <link rel="stylesheet" href="style.css?v=account-hint">
 </head>
 <body>
     <header class="title-shell">
@@ -51,6 +51,10 @@
             <div class="auth-quick">
                 <button id="auth-launch" type="button" data-help="Sign in to save arrangements, publish, rate, and comment. Open Account to sign out.">Sign In</button>
                 <div id="auth-mini-status" class="auth-mini-status">Not signed in.</div>
+                <div id="auth-account-hint" class="auth-account-hint" role="note" hidden>
+                    <p id="auth-account-hint-text">You must create an account to save or broadcast arrangements.</p>
+                    <label><input id="auth-account-hint-hide" type="checkbox" autocomplete="off"> hide</label>
+                </div>
             </div>
         </div>
     </div>
@@ -615,6 +619,6 @@
     <script src="js/player-core.js?v=mobile-player"></script>
     <script src="assets/vendor/midi-file/parse.js"></script>
     <script src="js/midi-source.js"></script>
-    <script src="js/app.js?v=radio-play-help"></script>
+    <script src="js/app.js?v=account-hint"></script>
 </body>
 </html>
